@@ -1938,7 +1938,7 @@ async function testFinnhubKey(key) {
   } catch (e) { return { valid: false, msg: e.message }; }
 }
 
-function DevToolsPanel({ onClose }) {
+function DevToolsPanel({ onClose, onDefaultsSaved }) {
   const [pin, setPin] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
   const [pinError, setPinError] = useState(false);
@@ -1992,6 +1992,7 @@ function DevToolsPanel({ onClose }) {
   function handleSave() {
     setDevDefaults(defaults);
     setSaved(true);
+    if (onDefaultsSaved) onDefaultsSaved();
   }
 
   const keyFields = [
@@ -2100,7 +2101,7 @@ function DevToolsPanel({ onClose }) {
 // ============================================================
 // SECTION 17: DASHBOARD PAGE
 // ============================================================
-function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode }) {
+function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode, onDevDefaultsSaved }) {
   const [showDevTools, setShowDevTools] = useState(false);
   function handleSelect(stock) {
     if (watchlist.some(w => w.ticker === stock.ticker)) return;
@@ -2170,7 +2171,7 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
       >
         &#9881;
       </button>
-      {showDevTools && <DevToolsPanel onClose={() => setShowDevTools(false)} />}
+      {showDevTools && <DevToolsPanel onClose={() => setShowDevTools(false)} onDefaultsSaved={onDevDefaultsSaved} />}
     </div>
   );
 }
@@ -2445,6 +2446,12 @@ function App() {
     setApiKeysState(keys);  // sync to App state so all pages see it
   }
 
+  function handleDevDefaultsSaved() {
+    // Re-read merged keys (new dev defaults + user overrides) and sync state
+    const refreshed = getApiKeys();
+    setApiKeysState(refreshed);
+  }
+
   function handleSetWatchlist(list) {
     setWatchlist(list);
     setWatchlistState(list);
@@ -2530,6 +2537,7 @@ function App() {
           onOpenKeys={() => setShowKeyModal(true)}
           proMode={proMode}
           setProMode={setProMode}
+          onDevDefaultsSaved={handleDevDefaultsSaved}
         />
       )}
       {page === 'detail' && selectedStock && rawData && checklist && (
