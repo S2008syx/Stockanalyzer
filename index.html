@@ -445,10 +445,16 @@ function getStore(key, fallback) {
   catch { return fallback; }
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+function getDevDefaults() {
+  const hardcoded = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: '', openrouter: '' };
+  return getStore('sa_dev_defaults', hardcoded);
+}
+function setDevDefaults(d) { setStore('sa_dev_defaults', d); }
 function getApiKeys() {
+  const defaults = getDevDefaults();
+  const base = { fmp: defaults.fmp, claude: defaults.claude, finnhub: defaults.finnhub, openrouter: defaults.openrouter, aiProvider: defaults.openrouter ? 'openrouter' : (defaults.claude ? 'claude' : 'openrouter') };
   const saved = getStore('sa_api_keys', null);
-  const defaults = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: '', openrouter: '', aiProvider: 'openrouter' };
-  return saved ? { ...defaults, ...saved } : defaults;
+  return saved ? { ...base, ...saved } : base;
 }
 function setApiKeys(k) { setStore('sa_api_keys', k); }
 function getWatchlist() { return getStore('sa_watchlist', []); }
@@ -1880,9 +1886,222 @@ function SupplementSection({ mktCapEbitda }) {
 }
 
 // ============================================================
+// SECTION 16B: DEVELOPER TOOLS PANEL
+// ============================================================
+const DEV_PIN = '080523';
+
+async function testFmpKey(key) {
+  if (!key) return { valid: false, msg: 'Key is empty' };
+  try {
+    const r = await fetch(`${FMP_STABLE}/profile?symbol=AAPL&apikey=${key}`);
+    if (!r.ok) return { valid: false, msg: `HTTP ${r.status}` };
+    const d = await r.json();
+    if (Array.isArray(d) && d.length > 0 && d[0].symbol) return { valid: true, msg: 'Valid' };
+    return { valid: false, msg: 'Invalid key or no data returned' };
+  } catch (e) { return { valid: false, msg: e.message }; }
+}
+
+async function testClaudeKey(key) {
+  if (!key) return { valid: false, msg: 'Key is empty' };
+  try {
+    const r = await fetch(CLAUDE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 5, messages: [{ role: 'user', content: 'Say ok' }] }),
+    });
+    if (!r.ok) { const err = await r.text().catch(() => ''); return { valid: false, msg: `HTTP ${r.status}` }; }
+    return { valid: true, msg: 'Valid' };
+  } catch (e) { return { valid: false, msg: e.message }; }
+}
+
+async function testOpenRouterKey(key) {
+  if (!key) return { valid: false, msg: 'Key is empty' };
+  try {
+    const r = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'HTTP-Referer': window.location.origin },
+      body: JSON.stringify({ model: 'anthropic/claude-haiku-4.5', max_tokens: 5, messages: [{ role: 'user', content: 'Say ok' }] }),
+    });
+    if (!r.ok) { const err = await r.text().catch(() => ''); return { valid: false, msg: `HTTP ${r.status}` }; }
+    return { valid: true, msg: 'Valid' };
+  } catch (e) { return { valid: false, msg: e.message }; }
+}
+
+async function testFinnhubKey(key) {
+  if (!key) return { valid: false, msg: 'Key is empty' };
+  try {
+    const r = await fetch(`${FINNHUB}/quote?symbol=AAPL&token=${key}`);
+    if (!r.ok) return { valid: false, msg: `HTTP ${r.status}` };
+    const d = await r.json();
+    if (d && d.c != null) return { valid: true, msg: 'Valid' };
+    return { valid: false, msg: 'Invalid key' };
+  } catch (e) { return { valid: false, msg: e.message }; }
+}
+
+function DevToolsPanel({ onClose }) {
+  const [pin, setPin] = useState('');
+  const [authenticated, setAuthenticated] = useState(false);
+  const [pinError, setPinError] = useState(false);
+  const [defaults, setDefaults] = useState(getDevDefaults);
+  const [status, setStatus] = useState({ fmp: null, claude: null, openrouter: null, finnhub: null });
+  const [testing, setTesting] = useState({ fmp: false, claude: false, openrouter: false, finnhub: false });
+  const [saved, setSaved] = useState(false);
+
+  function handlePinSubmit() {
+    if (pin === DEV_PIN) {
+      setAuthenticated(true);
+      setPinError(false);
+    } else {
+      setPinError(true);
+    }
+  }
+
+  function handleKeyChange(field, value) {
+    setDefaults(prev => ({ ...prev, [field]: value }));
+    setStatus(prev => ({ ...prev, [field]: null }));
+    setSaved(false);
+  }
+
+  async function handleTest(field) {
+    setTesting(prev => ({ ...prev, [field]: true }));
+    let result;
+    switch (field) {
+      case 'fmp': result = await testFmpKey(defaults.fmp); break;
+      case 'claude': result = await testClaudeKey(defaults.claude); break;
+      case 'openrouter': result = await testOpenRouterKey(defaults.openrouter); break;
+      case 'finnhub': result = await testFinnhubKey(defaults.finnhub); break;
+    }
+    setStatus(prev => ({ ...prev, [field]: result }));
+    setTesting(prev => ({ ...prev, [field]: false }));
+  }
+
+  async function handleAutoTest(field, value) {
+    if (!value) { setStatus(prev => ({ ...prev, [field]: { valid: false, msg: 'Key is empty' } })); return; }
+    setTesting(prev => ({ ...prev, [field]: true }));
+    let result;
+    switch (field) {
+      case 'fmp': result = await testFmpKey(value); break;
+      case 'claude': result = await testClaudeKey(value); break;
+      case 'openrouter': result = await testOpenRouterKey(value); break;
+      case 'finnhub': result = await testFinnhubKey(value); break;
+    }
+    setStatus(prev => ({ ...prev, [field]: result }));
+    setTesting(prev => ({ ...prev, [field]: false }));
+  }
+
+  function handleSave() {
+    setDevDefaults(defaults);
+    setSaved(true);
+  }
+
+  const keyFields = [
+    { key: 'fmp', label: 'Financial Modeling Prep (FMP)', placeholder: 'FMP API key' },
+    { key: 'claude', label: 'Anthropic Claude (Direct)', placeholder: 'sk-ant-...' },
+    { key: 'openrouter', label: 'OpenRouter', placeholder: 'sk-or-...' },
+    { key: 'finnhub', label: 'Finnhub', placeholder: 'Finnhub API key' },
+  ];
+
+  // PIN screen
+  if (!authenticated) {
+    return (
+      <div className="modal-overlay" style={{ zIndex: 9999 }}>
+        <div className="modal modal-sm" style={{ maxWidth: 360 }}>
+          <div className="modal-header">
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>Developer Tools</span>
+            </h2>
+            <p style={{ color: 'var(--text-dim)', fontSize: 12 }}>Enter PIN to access developer settings</p>
+          </div>
+          <div className="modal-body">
+            <div className="input-group">
+              <label className="input-label">PIN Code</label>
+              <input
+                className="input"
+                type="password"
+                value={pin}
+                onChange={e => { setPin(e.target.value); setPinError(false); }}
+                onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
+                placeholder="Enter PIN"
+                style={pinError ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 3px rgba(248,113,113,0.15)' } : {}}
+                autoFocus
+              />
+              {pinError && <span style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>Incorrect PIN. Please try again.</span>}
+            </div>
+          </div>
+          <div className="modal-footer" style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+            <button className="btn btn-primary" onClick={handlePinSubmit}>Unlock</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Authenticated: key management
+  return (
+    <div className="modal-overlay" style={{ zIndex: 9999 }}>
+      <div className="modal" style={{ maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="modal-header">
+          <h2 style={{ fontSize: 18 }}>Developer Tools - System Defaults</h2>
+          <p style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+            Changes here update system-level default API keys for all users.
+          </p>
+        </div>
+        <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
+          {keyFields.map(({ key, label, placeholder }) => {
+            const s = status[key];
+            const isTesting = testing[key];
+            const borderColor = s ? (s.valid ? 'var(--success)' : 'var(--danger)') : 'var(--border)';
+            return (
+              <div key={key} className="input-group" style={{ marginBottom: 16 }}>
+                <label className="input-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>{label}</span>
+                  {s && (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: s.valid ? 'var(--success)' : 'var(--danger)', textTransform: 'none', letterSpacing: 0 }}>
+                      {s.valid ? 'Valid' : s.msg}
+                    </span>
+                  )}
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="input"
+                    value={defaults[key]}
+                    onChange={e => handleKeyChange(key, e.target.value)}
+                    onBlur={e => { if (e.target.value) handleAutoTest(key, e.target.value); }}
+                    placeholder={placeholder}
+                    type="password"
+                    style={{ flex: 1, borderColor, transition: 'border-color .2s' }}
+                  />
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => handleTest(key)}
+                    disabled={isTesting || !defaults[key]}
+                    style={{ whiteSpace: 'nowrap', minWidth: 60 }}
+                  >
+                    {isTesting ? 'Testing...' : 'Test'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button className="btn btn-outline" onClick={onClose}>Close</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {saved && <span style={{ fontSize: 12, color: 'var(--success)' }}>Defaults saved</span>}
+            <button className="btn btn-primary" onClick={handleSave}>Save Defaults</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // SECTION 17: DASHBOARD PAGE
 // ============================================================
 function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode }) {
+  const [showDevTools, setShowDevTools] = useState(false);
   function handleSelect(stock) {
     if (watchlist.some(w => w.ticker === stock.ticker)) return;
     const newList = [...watchlist, stock];
@@ -1935,6 +2154,23 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
           )}
         </div>
       </main>
+      {/* Developer Tools FAB - bottom right */}
+      <button
+        onClick={() => setShowDevTools(true)}
+        title="Developer Tools"
+        style={{
+          position: 'fixed', bottom: 24, right: 24, width: 44, height: 44,
+          borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--card)',
+          color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: 18, transition: 'all .2s', zIndex: 50,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)'; }}
+      >
+        &#9881;
+      </button>
+      {showDevTools && <DevToolsPanel onClose={() => setShowDevTools(false)} />}
     </div>
   );
 }
