@@ -354,6 +354,35 @@
     .gap-2 { gap: 8px; }
     .hidden { display: none; }
 
+    /* ── AI Key Prompt ── */
+    .ai-key-prompt {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px;
+      animation: fadeUp .4s ease-out both; margin-bottom: 20px;
+    }
+    .ai-key-prompt h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .ai-key-prompt .ai-key-status { font-size: 13px; color: var(--text-sec); margin-bottom: 16px; }
+    .ai-key-prompt .ai-key-status .key-missing { color: var(--warn); font-weight: 600; }
+    .ai-key-prompt .ai-key-status .key-inaccessible { color: var(--danger); font-weight: 600; }
+    .ai-key-input-row {
+      display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
+    }
+    .ai-key-input-row select {
+      background: var(--bg-raised); border: 1px solid var(--border); color: var(--text);
+      border-radius: var(--radius-sm); padding: 8px 10px; font-size: 13px; outline: none;
+    }
+    .ai-key-input-row .input { flex: 1; }
+    .ai-key-submit {
+      background: var(--accent); color: var(--bg); border: none;
+      border-radius: var(--radius-sm); padding: 8px 18px; font-weight: 600;
+      font-size: 13px; cursor: pointer; white-space: nowrap; transition: opacity .2s;
+    }
+    .ai-key-submit:hover { opacity: .85; }
+    .ai-key-submit:disabled { opacity: .4; cursor: not-allowed; }
+    .ai-key-feedback { font-size: 12px; margin-top: 4px; }
+    .ai-key-feedback.success { color: var(--success); }
+    .ai-key-feedback.error { color: var(--danger); font-weight: 600; }
+
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -416,8 +445,12 @@ function getStore(key, fallback) {
   catch { return fallback; }
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-function getApiKeys() { return { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6hkighr01qr5k4cbdagd6hkighr01qr5k4cbdb0', openrouter: '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', aiProvider: 'openrouter' }; }
-function setApiKeys(k) { /* no-op: always use default keys */ }
+function getApiKeys() {
+  const saved = getStore('sa_api_keys', null);
+  const defaults = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6hkighr01qr5k4cbdagd6hkighr01qr5k4cbdb0', openrouter: '', aiProvider: 'openrouter' };
+  return saved ? { ...defaults, ...saved } : defaults;
+}
+function setApiKeys(k) { setStore('sa_api_keys', k); }
 function getWatchlist() { return getStore('sa_watchlist', []); }
 function setWatchlist(l) { setStore('sa_watchlist', l); }
 function getOverrides(ticker) { return getStore('sa_ov_' + ticker, {}); }
@@ -1424,7 +1457,69 @@ function MetricsTable({ data, overrides, onOverrideChange }) {
 // ============================================================
 // SECTION 10: AI INSIGHTS PANEL
 // ============================================================
-function AiInsightsPanel({ insights, loading, error }) {
+function AiKeyPrompt({ apiKeys, onKeySubmit }) {
+  const [provider, setProvider] = useState(apiKeys.aiProvider || 'openrouter');
+  const [keyInput, setKeyInput] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [feedback, setFeedback] = useState(null); // { type: 'success'|'error', msg }
+
+  const currentKey = provider === 'openrouter' ? apiKeys.openrouter : apiKeys.claude;
+  const isMissing = !currentKey;
+  const statusLabel = isMissing ? 'missing' : 'inaccessible';
+  const statusClass = isMissing ? 'key-missing' : 'key-inaccessible';
+
+  async function handleSubmit() {
+    if (!keyInput.trim()) return;
+    setTesting(true);
+    setFeedback(null);
+    try {
+      const testKeys = { ...apiKeys, [provider]: keyInput.trim(), aiProvider: provider };
+      await callAI('Say "ok" in one word.', testKeys, 10);
+      setFeedback({ type: 'success', msg: 'Key verified successfully!' });
+      onKeySubmit({ ...testKeys });
+    } catch (e) {
+      const msg = e.message || 'Key is inaccessible';
+      setFeedback({ type: 'error', msg: `Key is inaccessible — ${msg}` });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <div className="ai-key-prompt">
+      <h3>AI Insights</h3>
+      <div className="ai-key-status">
+        AI features are disabled — {provider === 'openrouter' ? 'OpenRouter' : 'Claude'} API key is <span className={statusClass}>{statusLabel}</span>.
+        <br />Enter a valid API key below to enable AI Insights and News Analysis.
+      </div>
+      <div className="ai-key-input-row">
+        <select value={provider} onChange={e => { setProvider(e.target.value); setFeedback(null); setKeyInput(''); }}>
+          <option value="openrouter">OpenRouter</option>
+          <option value="claude">Claude</option>
+        </select>
+        <input
+          className="input"
+          type="password"
+          placeholder={provider === 'openrouter' ? 'sk-or-...' : 'sk-ant-...'}
+          value={keyInput}
+          onChange={e => { setKeyInput(e.target.value); if (feedback) setFeedback(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
+        />
+        <button className="ai-key-submit" disabled={!keyInput.trim() || testing} onClick={handleSubmit}>
+          {testing ? 'Verifying...' : 'Submit Key'}
+        </button>
+      </div>
+      {feedback && (
+        <div className={`ai-key-feedback ${feedback.type}`}>{feedback.msg}</div>
+      )}
+    </div>
+  );
+}
+
+function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeySubmit }) {
+  if (!aiKeyValid) {
+    return <AiKeyPrompt apiKeys={apiKeys} onKeySubmit={onKeySubmit} />;
+  }
   if (loading) return (
     <div className="ai-panel">
       <h3>AI Insights</h3>
@@ -1769,7 +1864,8 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
 // ============================================================
 // SECTION 18: DETAIL PAGE
 // ============================================================
-function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, onBackToChecklist }) {
+function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userInputs, onBack, onBackToChecklist, onUpdateApiKeys }) {
+  const [localApiKeys, setLocalApiKeys] = useState(initialApiKeys);
   const [overrides, setOv] = useState(() => {
     const saved = getOverrides(stock.ticker);
     return { ...saved };
@@ -1779,6 +1875,7 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
   const [aiError, setAiError] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
+  const [aiKeyJustSet, setAiKeyJustSet] = useState(false);
 
   const profile = rawData.profile || {};
   const prices1y = rawData.prices1y || [];
@@ -1869,12 +1966,21 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
   const dailyChanges = useMemo(() => calcDailyChanges(prices1y), [prices1y]);
   const significantDays = useMemo(() => findSignificantChanges(dailyChanges), [dailyChanges]);
 
-  // Fetch AI insights after mount
+  // Handle inline key submission from AiKeyPrompt
+  function handleAiKeySubmit(newKeys) {
+    setLocalApiKeys(newKeys);
+    setApiKeys(newKeys);
+    if (onUpdateApiKeys) onUpdateApiKeys(newKeys);
+    setAiKeyJustSet(true);
+  }
+
+  // Fetch AI insights after mount or after key is set
   useEffect(() => {
-    if (!hasAiKey(apiKeys)) return;
+    if (!hasAiKey(localApiKeys)) return;
     const price = overrides.price ?? metricsData.price;
     const eps = overrides.eps ?? metricsData.eps;
     setAiLoading(true);
+    setAiError(null);
     fetchAiInsights({
       name: stock.name,
       ticker: stock.ticker,
@@ -1883,13 +1989,13 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
       marketCap: calcMarketCap(price, metricsData.shares),
       ebitda: metricsData.ebitda,
       fcf: metricsData.fcf,
-    }, apiKeys)
+    }, localApiKeys)
       .then(d => { setAiInsights(d); setAiError(null); })
       .catch(e => setAiError(e.message))
       .finally(() => setAiLoading(false));
-  }, []);
+  }, [aiKeyJustSet]);
 
-  // Fetch news for significant days
+  // Fetch news for significant days (re-run when key is set)
   useEffect(() => {
     if (significantDays.length === 0) return;
     setAlertsLoading(true);
@@ -1898,10 +2004,10 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
       for (const day of significantDays) {
         let news = [];
         try {
-          if (apiKeys.finnhub) {
-            news = await fetchFinnhubNews(stock.ticker, day.date, apiKeys.finnhub);
+          if (localApiKeys.finnhub) {
+            news = await fetchFinnhubNews(stock.ticker, day.date, localApiKeys.finnhub);
           } else {
-            const allNews = await fetchFmpNews(stock.ticker, apiKeys.fmp, 100);
+            const allNews = await fetchFmpNews(stock.ticker, localApiKeys.fmp, 100);
             news = (allNews || []).filter(n => {
               const nd = n.publishedDate ? n.publishedDate.slice(0, 10) : '';
               return nd === day.date;
@@ -1909,9 +2015,9 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
           }
         } catch {}
         let newsSummary = '';
-        if (hasAiKey(apiKeys) && news.length > 0) {
+        if (hasAiKey(localApiKeys) && news.length > 0) {
           try {
-            newsSummary = await fetchAiNewsSummary(news, apiKeys);
+            newsSummary = await fetchAiNewsSummary(news, localApiKeys);
           } catch { newsSummary = news[0]?.headline || news[0]?.title || 'News found but summary unavailable.'; }
         } else if (news.length > 0) {
           newsSummary = news[0]?.headline || news[0]?.title || '';
@@ -1922,7 +2028,7 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
       setAlertsLoading(false);
     };
     fetchNews();
-  }, [significantDays]);
+  }, [significantDays, aiKeyJustSet]);
 
   // Distribution data: prefer API, fall back to user inputs from checklist
   const geo = checklist.geo?.data || (userInputs?.geo?.length > 0 ? userInputs.geo : null);
@@ -1952,7 +2058,14 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
             onOverrideChange={handleOverrideChange}
           />
 
-          <AiInsightsPanel insights={aiInsights} loading={aiLoading} error={aiError} />
+          <AiInsightsPanel
+            insights={aiInsights}
+            loading={aiLoading}
+            error={aiError}
+            aiKeyValid={hasAiKey(localApiKeys)}
+            apiKeys={localApiKeys}
+            onKeySubmit={handleAiKeySubmit}
+          />
 
           <div className="charts-grid">
             {(() => {
@@ -1987,7 +2100,7 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
 // ============================================================
 function App() {
   const [apiKeys, setApiKeysState] = useState(getApiKeys);
-  const [showKeyModal, setShowKeyModal] = useState(!apiKeys.fmp || !hasAiKey(apiKeys));
+  const [showKeyModal, setShowKeyModal] = useState(false);
   const [watchlist, setWatchlistState] = useState(getWatchlist);
   const [page, setPage] = useState('dashboard');
   const [selectedStock, setSelectedStock] = useState(null);
@@ -2104,6 +2217,7 @@ function App() {
           userInputs={checklistInputs}
           onBack={handleBackToDashboard}
           onBackToChecklist={handleBackToChecklist}
+          onUpdateApiKeys={(keys) => { setApiKeysState(keys); }}
         />
       )}
     </>
