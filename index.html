@@ -539,6 +539,16 @@ async function fetchSegRevenue(ticker, key) {
   catch { return null; }
 }
 
+async function fetchPriceTargetConsensus(ticker, key) {
+  try { const d = await fmp4Get(`/price-target-consensus?symbol=${ticker}`, key); return d && d[0] ? d[0] : null; }
+  catch { return null; }
+}
+
+async function fetchRatingConsensus(ticker, key) {
+  try { const d = await fmp4Get(`/upgrades-downgrades-consensus?symbol=${ticker}`, key); return d && d[0] ? d[0] : null; }
+  catch { return null; }
+}
+
 async function fetchFinnhubNews(ticker, dateStr, finnhubKey) {
   const r = await fetch(`${FINNHUB}/company-news?symbol=${ticker}&from=${dateStr}&to=${dateStr}&token=${finnhubKey}`);
   if (!r.ok) return [];
@@ -558,6 +568,8 @@ async function fetchAllStockData(ticker, keys) {
     fetchRatios(ticker, keys.fmp).then(d => results.ratios = d).catch(() => results.ratios = []),
     fetchGeoRevenue(ticker, keys.fmp).then(d => results.geo = d).catch(() => results.geo = null),
     fetchSegRevenue(ticker, keys.fmp).then(d => results.seg = d).catch(() => results.seg = null),
+    fetchPriceTargetConsensus(ticker, keys.fmp).then(d => results.priceTarget = d).catch(() => results.priceTarget = null),
+    fetchRatingConsensus(ticker, keys.fmp).then(d => results.rating = d).catch(() => results.rating = null),
   ];
   await Promise.all(tasks);
   // Stable API profile lacks eps & sharesOutstanding; derive from other data
@@ -1433,6 +1445,8 @@ function MetricsTable({ data, overrides, onOverrideChange }) {
     { key: 'egr', label: 'Exp. Growth Rate (%)', value: egr, fmt: v => fmtNum(v) + '%', editable: true, calc: null },
     { key: 'forwardPE', label: 'Forward PE', value: forwardPE, fmt: v => fmtNum(v), editable: false, calc: 'Price / (EPS\u00D7(1+EGR))' },
     { key: 'shares', label: 'Shares Outstanding', value: shares, fmt: v => fmtBigNum(v), editable: !sharesFromApi, calc: null },
+    { key: 'analystTarget', label: 'Analyst Target Price', value: data.analystTarget, fmt: v => '$' + fmtNum(v), editable: false, calc: null },
+    { key: 'analystRating', label: 'Analyst Rating', value: data.analystRating, fmt: v => v, editable: false, calc: null },
   ];
 
   function handleChange(key, val) {
@@ -2234,7 +2248,9 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     ebitda: checklist.ebitda15?.data?.length > 0 ? [...checklist.ebitda15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
     fcf: checklist.fcf15?.data?.length > 0 ? [...checklist.fcf15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
     shares: profile.sharesOutstanding || null,
-  }), [profile, checklist]);
+    analystTarget: rawData.priceTarget?.targetConsensus || null,
+    analystRating: rawData.rating?.consensus || null,
+  }), [profile, checklist, rawData]);
 
   // Save overrides to localStorage when they change
   useEffect(() => {
