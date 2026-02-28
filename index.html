@@ -1726,6 +1726,7 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
         <div className="container header-inner">
           <span className="header-title">Stock Analyzer</span>
           <div className="header-actions">
+            <button className="btn btn-outline btn-sm" onClick={() => { if(confirm('Clear all local storage? This will remove your watchlist, saved overrides, and all cached data.')) { localStorage.clear(); location.reload(); } }} style={{ color: '#e74c3c', borderColor: '#e74c3c' }}>Clear Storage</button>
             <button className="btn btn-outline btn-sm" onClick={onOpenKeys}>API Keys</button>
           </div>
         </div>
