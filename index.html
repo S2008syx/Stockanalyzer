@@ -416,7 +416,7 @@ function getStore(key, fallback) {
   catch { return fallback; }
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-function getApiKeys() { const k = getStore('sa_apikeys', { fmp: '', claude: '', finnhub: '', openrouter: '', aiProvider: 'claude' }); if (!k.fmp) k.fmp = 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz'; if (!k.aiProvider) k.aiProvider = 'claude'; return k; }
+function getApiKeys() { const k = getStore('sa_apikeys', { fmp: '', claude: '', finnhub: '', openrouter: '', aiProvider: 'claude' }); if (!k.fmp) k.fmp = 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz'; if (!k.finnhub) k.finnhub = 'd6h4if9r01qnjncnb3fg'; if (!k.aiProvider) k.aiProvider = 'claude'; return k; }
 function setApiKeys(k) { setStore('sa_apikeys', k); }
 function getWatchlist() { return getStore('sa_watchlist', []); }
 function setWatchlist(l) { setStore('sa_watchlist', l); }
