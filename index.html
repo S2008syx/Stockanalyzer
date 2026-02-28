@@ -45,13 +45,14 @@
       border-bottom: 1px solid var(--border); padding: 14px 0;
       position: sticky; top: 0; z-index: 100;
     }
-    .header-inner { display: flex; align-items: center; justify-content: space-between; }
+    .header-inner { display: flex; align-items: center; justify-content: center; position: relative; }
     .header-title {
-      font-size: 18px; font-weight: 700; color: var(--accent);
-      letter-spacing: -0.3px;
+      font-size: 28px; font-weight: 800; color: var(--accent);
+      letter-spacing: -0.5px;
       font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+      text-align: center;
     }
-    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .header-actions { position: absolute; right: 0; display: flex; gap: 8px; align-items: center; }
     .main { flex: 1; padding: 28px 0; }
 
     /* ── Buttons ── */
@@ -1920,12 +1921,11 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
     <div className="app">
       <header className="header">
         <div className="container header-inner">
-          <div className="header-actions">
+          <div className="header-actions" style={{left: 0, right: 'auto'}}>
             <button className="btn btn-outline btn-sm" onClick={onBack}>&larr; Dashboard</button>
             <button className="btn btn-outline btn-sm" onClick={onBackToChecklist}>&#9998; Edit Data</button>
           </div>
           <span className="header-title">Stock Analyzer</span>
-          <span></span>
         </div>
       </header>
       <main className="main">
