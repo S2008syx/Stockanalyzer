@@ -447,7 +447,7 @@ function getStore(key, fallback) {
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 function getApiKeys() {
   const saved = getStore('sa_api_keys', null);
-  const defaults = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6hkighr01qr5k4cbdagd6hkighr01qr5k4cbdb0', openrouter: '', aiProvider: 'openrouter' };
+  const defaults = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: '', openrouter: '', aiProvider: 'openrouter' };
   return saved ? { ...defaults, ...saved } : defaults;
 }
 function setApiKeys(k) { setStore('sa_api_keys', k); }
@@ -1669,7 +1669,29 @@ function PriceAlertChart({ prices1y, significantDays }) {
 // ============================================================
 // SECTION 13: PRICE ALERT LIST
 // ============================================================
-function PriceAlertList({ alerts, loading }) {
+function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubmit }) {
+  // No AI key at all — show single prompt, hide everything
+  if (!aiKeyValid) {
+    return (
+      <div className="alert-section">
+        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Price Alerts (&gt;5% Daily Change)</h3>
+        <div className="ai-key-prompt" style={{ marginBottom: 0 }}>
+          <div className="ai-key-status">
+            Requires a valid AI API key to analyze news for significant price movements.
+          </div>
+        </div>
+      </div>
+    );
+  }
+  // AI key valid but no Finnhub — show Finnhub input prompt
+  if (!finnhubKey) {
+    return (
+      <div className="alert-section">
+        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Price Alerts (&gt;5% Daily Change)</h3>
+        <FinnhubKeyPrompt onSubmit={onFinnhubSubmit} />
+      </div>
+    );
+  }
   if (loading) {
     return (
       <div className="alert-section">
@@ -1703,6 +1725,54 @@ function PriceAlertList({ alerts, loading }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function FinnhubKeyPrompt({ onSubmit }) {
+  const [keyInput, setKeyInput] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+
+  async function handleSubmit() {
+    if (!keyInput.trim()) return;
+    setTesting(true);
+    setFeedback(null);
+    try {
+      const r = await fetch(`${FINNHUB}/quote?symbol=AAPL&token=${keyInput.trim()}`);
+      if (!r.ok) throw new Error(`Finnhub API error ${r.status}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setFeedback({ type: 'success', msg: 'Finnhub key verified!' });
+      onSubmit(keyInput.trim());
+    } catch (e) {
+      setFeedback({ type: 'error', msg: `Finnhub key is inaccessible — ${e.message}` });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <div className="ai-key-prompt" style={{ marginBottom: 0 }}>
+      <div className="ai-key-status">
+        Finnhub API key is <span className="key-missing">missing</span> — needed for targeted news fetching by date.
+      </div>
+      <div className="ai-key-input-row">
+        <input
+          className="input"
+          type="password"
+          placeholder="Finnhub API key"
+          value={keyInput}
+          onChange={e => { setKeyInput(e.target.value); if (feedback) setFeedback(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
+        />
+        <button className="ai-key-submit" disabled={!keyInput.trim() || testing} onClick={handleSubmit}>
+          {testing ? 'Verifying...' : 'Submit Key'}
+        </button>
+      </div>
+      {feedback && (
+        <div className={`ai-key-feedback ${feedback.type}`}>{feedback.msg}</div>
+      )}
     </div>
   );
 }
@@ -1967,11 +2037,21 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
   const significantDays = useMemo(() => findSignificantChanges(dailyChanges), [dailyChanges]);
 
   // Handle inline key submission from AiKeyPrompt
+  // Handle inline AI key submission from AiKeyPrompt
   function handleAiKeySubmit(newKeys) {
     setLocalApiKeys(newKeys);
     setApiKeys(newKeys);
     if (onUpdateApiKeys) onUpdateApiKeys(newKeys);
-    setAiKeyJustSet(true);
+    setAiKeyJustSet(prev => !prev);
+  }
+
+  // Handle Finnhub key submission from FinnhubKeyPrompt
+  function handleFinnhubSubmit(finnhubKey) {
+    const newKeys = { ...localApiKeys, finnhub: finnhubKey };
+    setLocalApiKeys(newKeys);
+    setApiKeys(newKeys);
+    if (onUpdateApiKeys) onUpdateApiKeys(newKeys);
+    setAiKeyJustSet(prev => !prev);
   }
 
   // Fetch AI insights after mount or after key is set
@@ -1995,32 +2075,23 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
       .finally(() => setAiLoading(false));
   }, [aiKeyJustSet]);
 
-  // Fetch news for significant days (re-run when key is set)
+  // Fetch news for significant days (only when AI key + Finnhub key are both available)
   useEffect(() => {
     if (significantDays.length === 0) return;
+    if (!hasAiKey(localApiKeys) || !localApiKeys.finnhub) return;
     setAlertsLoading(true);
     const fetchNews = async () => {
       const results = [];
       for (const day of significantDays) {
         let news = [];
         try {
-          if (localApiKeys.finnhub) {
-            news = await fetchFinnhubNews(stock.ticker, day.date, localApiKeys.finnhub);
-          } else {
-            const allNews = await fetchFmpNews(stock.ticker, localApiKeys.fmp, 100);
-            news = (allNews || []).filter(n => {
-              const nd = n.publishedDate ? n.publishedDate.slice(0, 10) : '';
-              return nd === day.date;
-            });
-          }
+          news = await fetchFinnhubNews(stock.ticker, day.date, localApiKeys.finnhub);
         } catch {}
         let newsSummary = '';
-        if (hasAiKey(localApiKeys) && news.length > 0) {
+        if (news.length > 0) {
           try {
             newsSummary = await fetchAiNewsSummary(news, localApiKeys);
           } catch { newsSummary = news[0]?.headline || news[0]?.title || 'News found but summary unavailable.'; }
-        } else if (news.length > 0) {
-          newsSummary = news[0]?.headline || news[0]?.title || '';
         }
         results.push({ ...day, newsSummary });
       }
@@ -2086,7 +2157,13 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
 
           <DistributionSection geo={geo} seg={seg} />
 
-          <PriceAlertList alerts={alerts} loading={alertsLoading} />
+          <PriceAlertList
+            alerts={alerts}
+            loading={alertsLoading}
+            aiKeyValid={hasAiKey(localApiKeys)}
+            finnhubKey={localApiKeys.finnhub}
+            onFinnhubSubmit={handleFinnhubSubmit}
+          />
 
           <MissingDataFooter checklist={checklist} />
         </div>
