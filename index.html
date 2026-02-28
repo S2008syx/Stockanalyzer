@@ -1159,9 +1159,9 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
 
   function handleConfirm() {
     const result = { ...userInputs };
-    // Package distribution data
-    const validGeo = geoRows.filter(r => r.label && r.value).map(r => ({ label: r.label, value: Number(r.value) || 0 }));
-    const validSeg = segRows.filter(r => r.label && r.value).map(r => ({ label: r.label, value: Number(r.value) || 0 }));
+    // Package distribution data (user enters in billions, multiply by 1e9)
+    const validGeo = geoRows.filter(r => r.label && r.value).map(r => ({ label: r.label, value: (Number(r.value) || 0) * 1e9 }));
+    const validSeg = segRows.filter(r => r.label && r.value).map(r => ({ label: r.label, value: (Number(r.value) || 0) * 1e9 }));
     if (validGeo.length > 0) result.geo = validGeo;
     if (validSeg.length > 0) result.seg = validSeg;
     onConfirm(result);
@@ -1200,11 +1200,12 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
                   ) : (
                     <input
                       className="input input-sm"
-                      placeholder="-"
+                      placeholder={item.fmt === 'big' ? 'B' : '-'}
                       type="number"
                       step="any"
                       value={(userInputs[item.key] && userInputs[item.key][year]) || ''}
                       onChange={e => handleYearChange(item.key, year, e.target.value)}
+                      title={item.fmt === 'big' ? 'Enter value in billions (e.g. 2.5 = $2.5B)' : ''}
                     />
                   )}
                 </div>
@@ -1233,11 +1234,12 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
             <input
               className="input input-sm"
               style={{ width: 140 }}
-              placeholder="Enter value"
+              placeholder={item.fmt === 'big' ? 'In billions' : 'Enter value'}
               type="number"
               step="any"
               value={userInputs[item.key] || ''}
               onChange={e => handleSingleChange(item.key, e.target.value)}
+              title={item.fmt === 'big' ? 'Enter value in billions (e.g. 2.5 = 2.5B)' : ''}
             />
           )}
         </div>
@@ -1271,7 +1273,7 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
               />
               <input
                 className="input input-sm"
-                placeholder="Revenue ($)"
+                placeholder="Revenue (in B)"
                 type="number"
                 step="any"
                 value={row.value || ''}
@@ -1334,6 +1336,9 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
           <p>
             Data range: {meta.expectedYears || '?'} years (since {meta.yearList?.[0] || '?'}).
             Fill in missing values below or leave blank to skip.
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--accent)', marginTop: 4 }}>
+            Note: For EBITDA, Market Cap, FCF, and Shares fields, enter values in billions (e.g. 2.5 = $2.5B)
           </p>
         </div>
         <div className="modal-body">
@@ -1704,7 +1709,7 @@ function SupplementSection({ mktCapEbitda }) {
 // ============================================================
 // SECTION 17: DASHBOARD PAGE
 // ============================================================
-function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys }) {
+function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode }) {
   function handleSelect(stock) {
     if (watchlist.some(w => w.ticker === stock.ticker)) return;
     const newList = [...watchlist, stock];
@@ -1728,6 +1733,11 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
       <main className="main">
         <div className="container">
           <SmartSearch apiKey={apiKeys.fmp} onSelect={handleSelect} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0', cursor: 'pointer', fontSize: 14, color: 'var(--text-sec)' }}>
+            <input type="checkbox" checked={proMode} onChange={e => setProMode(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+            Are you a pro?
+            <span style={{ fontSize: 12, opacity: 0.7 }}>(enables manual data review before analysis)</span>
+          </label>
           {watchlist.length === 0 ? (
             <div className="watchlist-empty">
               <div style={{ fontSize: 40, opacity: 0.3 }}>&#128200;</div>
@@ -1778,7 +1788,7 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
       const merged = { ...overrides };
       if (userInputs.price) merged.price = Number(userInputs.price);
       if (userInputs.eps) merged.eps = Number(userInputs.eps);
-      if (userInputs.shares) merged.shares = Number(userInputs.shares);
+      if (userInputs.shares) merged.shares = Number(userInputs.shares) * 1e9;
       if (userInputs.egr) merged.egr = Number(userInputs.egr);
       setOv(merged);
       setOverrides(stock.ticker, merged);
@@ -1841,17 +1851,17 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
 
   // EBITDA series
   const ebitdaSeries = useMemo(() => {
-    return mergeHistoryInputs(checklist.ebitda15?.data || [], 'ebitda15');
+    return mergeHistoryInputs(checklist.ebitda15?.data || [], 'ebitda15', v => v * 1e9);
   }, [checklist, userInputs]);
 
   // Market Cap series
   const mktcapSeries = useMemo(() => {
-    return mergeHistoryInputs(checklist.mktcap15?.data || [], 'mktcap15');
+    return mergeHistoryInputs(checklist.mktcap15?.data || [], 'mktcap15', v => v * 1e9);
   }, [checklist, userInputs]);
 
   // FCF series
   const fcfSeries = useMemo(() => {
-    return mergeHistoryInputs(checklist.fcf15?.data || [], 'fcf15');
+    return mergeHistoryInputs(checklist.fcf15?.data || [], 'fcf15', v => v * 1e9);
   }, [checklist, userInputs]);
 
   // Price alert: calculate significant days
@@ -1988,6 +1998,7 @@ function App() {
   const [checklistInputs, setChecklistInputs] = useState({});
   const [checklistSource, setChecklistSource] = useState('dashboard');
   const [detailVersion, setDetailVersion] = useState(0);
+  const [proMode, setProMode] = useState(false);
 
   function handleSaveKeys(keys) {
     setApiKeys(keys);
@@ -2013,8 +2024,12 @@ function App() {
       // Restore previously saved user inputs for this ticker
       const saved = getUserInputs(stock.ticker);
       setChecklistInputs(saved);
-      setChecklistSource('dashboard');
-      setShowChecklist(true);
+      if (proMode) {
+        setChecklistSource('dashboard');
+        setShowChecklist(true);
+      } else {
+        setPage('detail');
+      }
     } catch (err) {
       setLoading(false);
       alert('Error fetching data: ' + err.message);
@@ -2074,6 +2089,8 @@ function App() {
           setWatchlist={handleSetWatchlist}
           onSelectStock={handleSelectStock}
           onOpenKeys={() => setShowKeyModal(true)}
+          proMode={proMode}
+          setProMode={setProMode}
         />
       )}
       {page === 'detail' && selectedStock && rawData && checklist && (
