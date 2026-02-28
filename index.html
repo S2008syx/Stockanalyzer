@@ -1020,7 +1020,7 @@ function ApiKeyModal({ keys, onSave }) {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-primary" disabled={!fmp || !aiKeyValid} onClick={() => onSave({ fmp, claude, openrouter, finnhub, aiProvider })}>
+          <button className="btn btn-primary" disabled={!fmp} onClick={() => onSave({ fmp, claude, openrouter, finnhub, aiProvider })}>
             Save & Continue
           </button>
         </div>
