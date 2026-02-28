@@ -647,7 +647,12 @@ Provide your analysis in this EXACT JSON format (no markdown, no code fences, ju
 }`;
   const text = await callAI(prompt, apiKeys);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+  if (!jsonMatch) throw new Error('AI returned an unexpected response format. Please try again.');
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error('AI returned malformed data. Please try again.');
+  }
 }
 
 // AI: Summarize news for price alert dates
@@ -1123,7 +1128,7 @@ function SmartSearch({ apiKey, onSelect }) {
           {results.map(r => (
             <div key={r.symbol} className="search-item" onClick={() => handleSelect(r)}>
               <span className="search-item-ticker">{r.symbol}</span>
-              <span className="search-item-name">{r.name}</span>
+              <span className="search-item-name">{r.name || r.symbol}</span>
             </div>
           ))}
         </div>
@@ -1404,7 +1409,8 @@ function MetricsTable({ data, overrides, onOverrideChange }) {
   const egr = overrides.egr != null ? Number(overrides.egr) : (data.egr || null);
   const ebitda = overrides.ebitda != null ? Number(overrides.ebitda) : data.ebitda;
   const fcf = overrides.fcf != null ? Number(overrides.fcf) : data.fcf;
-  const shares = data.shares;
+  const sharesFromApi = data.shares != null;
+  const shares = sharesFromApi ? data.shares : (overrides.shares != null ? Number(overrides.shares) : null);
 
   const pe = calcPE(price, eps);
   const forwardPE = calcForwardPE(price, eps, egr);
@@ -1420,7 +1426,7 @@ function MetricsTable({ data, overrides, onOverrideChange }) {
     { key: 'eps', label: 'EPS (TTM)', value: eps, fmt: v => '$' + fmtNum(v), editable: true, calc: null },
     { key: 'egr', label: 'Exp. Growth Rate (%)', value: egr, fmt: v => fmtNum(v) + '%', editable: true, calc: null },
     { key: 'forwardPE', label: 'Forward PE', value: forwardPE, fmt: v => fmtNum(v), editable: false, calc: 'Price / (EPS\u00D7(1+EGR))' },
-    { key: 'shares', label: 'Shares Outstanding', value: shares, fmt: v => fmtBigNum(v), editable: false, calc: null },
+    { key: 'shares', label: 'Shares Outstanding', value: shares, fmt: v => fmtBigNum(v), editable: !sharesFromApi, calc: null },
   ];
 
   function handleChange(key, val) {
@@ -1464,9 +1470,9 @@ function AiKeyPrompt({ apiKeys, onKeySubmit }) {
   const [feedback, setFeedback] = useState(null); // { type: 'success'|'error', msg }
 
   const currentKey = provider === 'openrouter' ? apiKeys.openrouter : apiKeys.claude;
-  const isMissing = !currentKey;
-  const statusLabel = isMissing ? 'missing' : 'inaccessible';
-  const statusClass = isMissing ? 'key-missing' : 'key-inaccessible';
+  const activeProviderHasKey = provider === apiKeys.aiProvider ? hasAiKey(apiKeys) : !!currentKey;
+  const statusLabel = !currentKey ? 'missing' : 'set but not active';
+  const statusClass = !currentKey ? 'key-missing' : 'key-inaccessible';
 
   async function handleSubmit() {
     if (!keyInput.trim()) return;
@@ -1715,8 +1721,8 @@ function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubm
         <div className="alert-row" style={{ fontWeight: 600, background: 'var(--bg)' }}>
           <span>Date</span><span style={{ textAlign: 'center' }}>Change</span><span>News Summary</span>
         </div>
-        {alerts.map((a, i) => (
-          <div key={i} className="alert-row">
+        {alerts.map((a) => (
+          <div key={`${a.date}_${a.change}`} className="alert-row">
             <span className="alert-date">{a.date}</span>
             <span className={`alert-change ${a.change >= 0 ? 'alert-up' : 'alert-down'}`}>
               {fmtPct(a.change)}
@@ -1739,10 +1745,12 @@ function FinnhubKeyPrompt({ onSubmit }) {
     setTesting(true);
     setFeedback(null);
     try {
-      const r = await fetch(`${FINNHUB}/quote?symbol=AAPL&token=${keyInput.trim()}`);
+      const today = new Date().toISOString().slice(0, 10);
+      const r = await fetch(`${FINNHUB}/company-news?symbol=AAPL&from=${today}&to=${today}&token=${keyInput.trim()}`);
       if (!r.ok) throw new Error(`Finnhub API error ${r.status}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
+      if (!Array.isArray(d)) throw new Error('Unexpected response from Finnhub news endpoint');
       setFeedback({ type: 'success', msg: 'Finnhub key verified!' });
       onSubmit(keyInput.trim());
     } catch (e) {
@@ -1945,7 +1953,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
   const [aiError, setAiError] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
-  const [aiKeyJustSet, setAiKeyJustSet] = useState(false);
+  const [keyVersion, setKeyVersion] = useState(0);
 
   const profile = rawData.profile || {};
   const prices1y = rawData.prices1y || [];
@@ -1956,7 +1964,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
       const merged = { ...overrides };
       if (userInputs.price) merged.price = Number(userInputs.price);
       if (userInputs.eps) merged.eps = Number(userInputs.eps);
-      if (userInputs.shares) merged.shares = Number(userInputs.shares) * 1e9;
+      if (userInputs.shares && !rawData?.profile?.sharesOutstanding) merged.shares = Number(userInputs.shares) * 1e9;
       if (userInputs.egr) merged.egr = Number(userInputs.egr);
       setOv(merged);
       setOverrides(stock.ticker, merged);
@@ -1985,9 +1993,9 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     price: profile.price || null,
     eps: profile.eps || null,
     egr: null,
-    ps: checklist.ps15?.data?.length > 0 ? checklist.ps15.data[checklist.ps15.data.length - 1].value : null,
-    ebitda: checklist.ebitda15?.data?.length > 0 ? checklist.ebitda15.data[checklist.ebitda15.data.length - 1].value : null,
-    fcf: checklist.fcf15?.data?.length > 0 ? checklist.fcf15.data[checklist.fcf15.data.length - 1].value : null,
+    ps: checklist.ps15?.data?.length > 0 ? [...checklist.ps15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
+    ebitda: checklist.ebitda15?.data?.length > 0 ? [...checklist.ebitda15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
+    fcf: checklist.fcf15?.data?.length > 0 ? [...checklist.fcf15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
     shares: profile.sharesOutstanding || null,
   }), [profile, checklist]);
 
@@ -2036,22 +2044,19 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
   const dailyChanges = useMemo(() => calcDailyChanges(prices1y), [prices1y]);
   const significantDays = useMemo(() => findSignificantChanges(dailyChanges), [dailyChanges]);
 
-  // Handle inline key submission from AiKeyPrompt
-  // Handle inline AI key submission from AiKeyPrompt
+  // Handle inline AI key submission from AiKeyPrompt (key already validated)
   function handleAiKeySubmit(newKeys) {
     setLocalApiKeys(newKeys);
-    setApiKeys(newKeys);
-    if (onUpdateApiKeys) onUpdateApiKeys(newKeys);
-    setAiKeyJustSet(prev => !prev);
+    if (onUpdateApiKeys) onUpdateApiKeys(newKeys); // sync to App state + localStorage
+    setKeyVersion(v => v + 1);
   }
 
-  // Handle Finnhub key submission from FinnhubKeyPrompt
+  // Handle Finnhub key submission from FinnhubKeyPrompt (key already validated)
   function handleFinnhubSubmit(finnhubKey) {
     const newKeys = { ...localApiKeys, finnhub: finnhubKey };
     setLocalApiKeys(newKeys);
-    setApiKeys(newKeys);
-    if (onUpdateApiKeys) onUpdateApiKeys(newKeys);
-    setAiKeyJustSet(prev => !prev);
+    if (onUpdateApiKeys) onUpdateApiKeys(newKeys); // sync to App state + localStorage
+    setKeyVersion(v => v + 1);
   }
 
   // Fetch AI insights after mount or after key is set
@@ -2073,7 +2078,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
       .then(d => { setAiInsights(d); setAiError(null); })
       .catch(e => setAiError(e.message))
       .finally(() => setAiLoading(false));
-  }, [aiKeyJustSet]);
+  }, [keyVersion]);
 
   // Fetch news for significant days (only when AI key + Finnhub key are both available)
   useEffect(() => {
@@ -2088,10 +2093,12 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
           news = await fetchFinnhubNews(stock.ticker, day.date, localApiKeys.finnhub);
         } catch {}
         let newsSummary = '';
-        if (news.length > 0) {
+        if (news.length > 0 && hasAiKey(localApiKeys)) {
           try {
             newsSummary = await fetchAiNewsSummary(news, localApiKeys);
           } catch { newsSummary = news[0]?.headline || news[0]?.title || 'News found but summary unavailable.'; }
+        } else if (news.length > 0) {
+          newsSummary = news[0]?.headline || news[0]?.title || 'News available but AI key missing for summary.';
         }
         results.push({ ...day, newsSummary });
       }
@@ -2099,7 +2106,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
       setAlertsLoading(false);
     };
     fetchNews();
-  }, [significantDays, aiKeyJustSet]);
+  }, [significantDays, keyVersion]);
 
   // Distribution data: prefer API, fall back to user inputs from checklist
   const geo = checklist.geo?.data || (userInputs?.geo?.length > 0 ? userInputs.geo : null);
@@ -2195,6 +2202,11 @@ function App() {
     setApiKeys(keys);
     setApiKeysState(keys);
     setShowKeyModal(false);
+  }
+
+  function handleUpdateApiKeys(keys) {
+    setApiKeys(keys);       // persist to localStorage
+    setApiKeysState(keys);  // sync to App state so all pages see it
   }
 
   function handleSetWatchlist(list) {
@@ -2294,7 +2306,7 @@ function App() {
           userInputs={checklistInputs}
           onBack={handleBackToDashboard}
           onBackToChecklist={handleBackToChecklist}
-          onUpdateApiKeys={(keys) => { setApiKeysState(keys); }}
+          onUpdateApiKeys={handleUpdateApiKeys}
         />
       )}
     </>
