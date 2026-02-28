@@ -416,7 +416,7 @@ function getStore(key, fallback) {
   catch { return fallback; }
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-function getApiKeys() { return { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6h4if9r01qnjncnb3fg', openrouter: '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', aiProvider: 'openrouter' }; }
+function getApiKeys() { return { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6h4if9r01qnjncnb3g0', openrouter: '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', aiProvider: 'openrouter' }; }
 function setApiKeys(k) { /* no-op: always use default keys */ }
 function getWatchlist() { return getStore('sa_watchlist', []); }
 function setWatchlist(l) { setStore('sa_watchlist', l); }
