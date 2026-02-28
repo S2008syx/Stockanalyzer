@@ -416,8 +416,8 @@ function getStore(key, fallback) {
   catch { return fallback; }
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-function getApiKeys() { const k = getStore('sa_apikeys', { fmp: '', claude: '', finnhub: '', openrouter: '', aiProvider: 'openrouter' }); if (!k.fmp) k.fmp = 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz'; if (!k.finnhub) k.finnhub = 'd6h4if9r01qnjncnb3fg'; if (!k.openrouter) k.openrouter = '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'; if (!k.aiProvider) k.aiProvider = 'openrouter'; return k; }
-function setApiKeys(k) { setStore('sa_apikeys', k); }
+function getApiKeys() { return { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6h4if9r01qnjncnb3fg', openrouter: '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', aiProvider: 'openrouter' }; }
+function setApiKeys(k) { /* no-op: always use default keys */ }
 function getWatchlist() { return getStore('sa_watchlist', []); }
 function setWatchlist(l) { setStore('sa_watchlist', l); }
 function getOverrides(ticker) { return getStore('sa_ov_' + ticker, {}); }
