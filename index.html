@@ -383,6 +383,7 @@ const { useState, useEffect, useRef, useCallback, useMemo } = React;
 // ============================================================
 const FMP_STABLE = 'https://financialmodelingprep.com/stable';
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const FINNHUB = 'https://finnhub.io/api/v1';
 const CURRENT_YEAR = new Date().getFullYear();
 const DATA_YEARS = 15;
@@ -414,7 +415,7 @@ function getStore(key, fallback) {
   catch { return fallback; }
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-function getApiKeys() { const k = getStore('sa_apikeys', { fmp: '', claude: '', finnhub: '' }); if (!k.fmp) k.fmp = 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz'; return k; }
+function getApiKeys() { const k = getStore('sa_apikeys', { fmp: '', claude: '', finnhub: '', openrouter: '', aiProvider: 'claude' }); if (!k.fmp) k.fmp = 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz'; if (!k.aiProvider) k.aiProvider = 'claude'; return k; }
 function setApiKeys(k) { setStore('sa_apikeys', k); }
 function getWatchlist() { return getStore('sa_watchlist', []); }
 function setWatchlist(l) { setStore('sa_watchlist', l); }
@@ -555,8 +556,44 @@ async function callClaude(prompt, claudeKey, maxTokens = 1024) {
   return (d.content && d.content[0] && d.content[0].text) ? d.content[0].text.trim() : '';
 }
 
+// AI helper: call OpenRouter API (OpenAI-compatible)
+async function callOpenRouter(prompt, openrouterKey, maxTokens = 1024) {
+  const r = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${openrouterKey}`,
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-haiku-4-5-20251001',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!r.ok) {
+    const err = await r.text().catch(() => '');
+    throw new Error(`OpenRouter API error ${r.status}: ${err}`);
+  }
+  const d = await r.json();
+  return (d.choices && d.choices[0] && d.choices[0].message) ? d.choices[0].message.content.trim() : '';
+}
+
+// Unified AI call: routes to Claude or OpenRouter based on user preference
+async function callAI(prompt, apiKeys, maxTokens = 1024) {
+  if (apiKeys.aiProvider === 'openrouter' && apiKeys.openrouter) {
+    return callOpenRouter(prompt, apiKeys.openrouter, maxTokens);
+  }
+  return callClaude(prompt, apiKeys.claude, maxTokens);
+}
+
+// Helper: check if AI is configured
+function hasAiKey(apiKeys) {
+  if (apiKeys.aiProvider === 'openrouter') return !!apiKeys.openrouter;
+  return !!apiKeys.claude;
+}
+
 // AI: Generate insights
-async function fetchAiInsights(stockInfo, claudeKey) {
+async function fetchAiInsights(stockInfo, apiKeys) {
   const prompt = `Analyze the stock ${stockInfo.name} (${stockInfo.ticker}).
 Current Price: $${stockInfo.price || 'N/A'}
 PE Ratio: ${stockInfo.pe || 'N/A'}
@@ -572,13 +609,13 @@ Provide your analysis in this EXACT JSON format (no markdown, no code fences, ju
   "pros": ["Pro point 1", "Pro point 2", "Pro point 3"],
   "cons": ["Con point 1", "Con point 2", "Con point 3"]
 }`;
-  const text = await callClaude(prompt, claudeKey);
+  const text = await callAI(prompt, apiKeys);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
 }
 
 // AI: Summarize news for price alert dates
-async function fetchAiNewsSummary(newsItems, claudeKey) {
+async function fetchAiNewsSummary(newsItems, apiKeys) {
   if (!newsItems || newsItems.length === 0) return 'No news available for this date.';
   const headlines = newsItems.map(n => n.headline || n.title || '').filter(Boolean).slice(0, 5).join('\n- ');
   const prompt = `Given these news headlines for a stock on a day with >5% price change:
@@ -586,7 +623,7 @@ async function fetchAiNewsSummary(newsItems, claudeKey) {
 
 Write ONE concise sentence (max 30 words) summarizing what likely caused the price movement. Output ONLY the sentence, nothing else.`;
   try {
-    return await callClaude(prompt, claudeKey, 100);
+    return await callAI(prompt, apiKeys, 100);
   } catch {
     return 'AI summary unavailable.';
   }
@@ -891,7 +928,10 @@ function PieWrap({ data, options, height }) {
 function ApiKeyModal({ keys, onSave }) {
   const [fmp, setFmp] = useState(keys.fmp || '');
   const [claude, setClaude] = useState(keys.claude || '');
+  const [openrouter, setOpenrouter] = useState(keys.openrouter || '');
+  const [aiProvider, setAiProvider] = useState(keys.aiProvider || 'claude');
   const [finnhub, setFinnhub] = useState(keys.finnhub || '');
+  const aiKeyValid = aiProvider === 'claude' ? !!claude : !!openrouter;
   return (
     <div className="modal-overlay">
       <div className="modal modal-sm">
@@ -905,16 +945,46 @@ function ApiKeyModal({ keys, onSave }) {
             <input className="input" value={fmp} onChange={e => setFmp(e.target.value)} placeholder="Your FMP API key" />
           </div>
           <div className="input-group mb-4">
-            <label className="input-label">Anthropic Claude API Key (for AI Insights) *</label>
-            <input className="input" value={claude} onChange={e => setClaude(e.target.value)} placeholder="sk-ant-..." type="password" />
+            <label className="input-label">AI Provider *</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className={`btn ${aiProvider === 'claude' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ flex: 1 }}
+                onClick={() => setAiProvider('claude')}
+              >
+                Anthropic Claude
+              </button>
+              <button
+                className={`btn ${aiProvider === 'openrouter' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ flex: 1 }}
+                onClick={() => setAiProvider('openrouter')}
+              >
+                OpenRouter
+              </button>
+            </div>
           </div>
+          {aiProvider === 'claude' && (
+            <div className="input-group mb-4">
+              <label className="input-label">Anthropic Claude API Key *</label>
+              <input className="input" value={claude} onChange={e => setClaude(e.target.value)} placeholder="sk-ant-..." type="password" />
+            </div>
+          )}
+          {aiProvider === 'openrouter' && (
+            <div className="input-group mb-4">
+              <label className="input-label">OpenRouter API Key *</label>
+              <input className="input" value={openrouter} onChange={e => setOpenrouter(e.target.value)} placeholder="sk-or-..." type="password" />
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                Get your key at openrouter.ai — uses Claude Haiku via OpenRouter
+              </span>
+            </div>
+          )}
           <div className="input-group">
             <label className="input-label">Finnhub API Key (optional, for targeted news)</label>
             <input className="input" value={finnhub} onChange={e => setFinnhub(e.target.value)} placeholder="Finnhub API key (optional)" />
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-primary" disabled={!fmp || !claude} onClick={() => onSave({ fmp, claude, finnhub })}>
+          <button className="btn btn-primary" disabled={!fmp || !aiKeyValid} onClick={() => onSave({ fmp, claude, openrouter, finnhub, aiProvider })}>
             Save & Continue
           </button>
         </div>
@@ -1787,7 +1857,7 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
 
   // Fetch AI insights after mount
   useEffect(() => {
-    if (!apiKeys.claude) return;
+    if (!hasAiKey(apiKeys)) return;
     const price = overrides.price ?? metricsData.price;
     const eps = overrides.eps ?? metricsData.eps;
     setAiLoading(true);
@@ -1799,7 +1869,7 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
       marketCap: calcMarketCap(price, metricsData.shares),
       ebitda: metricsData.ebitda,
       fcf: metricsData.fcf,
-    }, apiKeys.claude)
+    }, apiKeys)
       .then(d => { setAiInsights(d); setAiError(null); })
       .catch(e => setAiError(e.message))
       .finally(() => setAiLoading(false));
@@ -1825,9 +1895,9 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
           }
         } catch {}
         let newsSummary = '';
-        if (apiKeys.claude && news.length > 0) {
+        if (hasAiKey(apiKeys) && news.length > 0) {
           try {
-            newsSummary = await fetchAiNewsSummary(news, apiKeys.claude);
+            newsSummary = await fetchAiNewsSummary(news, apiKeys);
           } catch { newsSummary = news[0]?.headline || news[0]?.title || 'News found but summary unavailable.'; }
         } else if (news.length > 0) {
           newsSummary = news[0]?.headline || news[0]?.title || '';
@@ -1904,7 +1974,7 @@ function DetailPage({ stock, apiKeys, rawData, checklist, userInputs, onBack, on
 // ============================================================
 function App() {
   const [apiKeys, setApiKeysState] = useState(getApiKeys);
-  const [showKeyModal, setShowKeyModal] = useState(!apiKeys.fmp || !apiKeys.claude);
+  const [showKeyModal, setShowKeyModal] = useState(!apiKeys.fmp || !hasAiKey(apiKeys));
   const [watchlist, setWatchlistState] = useState(getWatchlist);
   const [page, setPage] = useState('dashboard');
   const [selectedStock, setSelectedStock] = useState(null);
