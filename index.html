@@ -432,6 +432,8 @@ const CHECKLIST_ITEMS = [
   { key: 'seg', label: 'Revenue by Business Segment', type: 'distribution' },
   { key: 'prices1y', label: '1Y Daily Price Data', type: 'priceSeries' },
   { key: 'sig5', label: 'Significant Days (>5% Change)', type: 'readonly' },
+  { key: 'analystTarget', label: 'Analyst Target Price', type: 'readonly' },
+  { key: 'analystRating', label: 'Analyst Rating', type: 'readonly' },
 ];
 
 const CHART_COLORS = ['#4ADE80','#60A5FA','#A78BFA','#FB923C','#F87171','#22D3EE','#818CF8','#F472B6'];
@@ -898,6 +900,12 @@ function buildChecklist(rawData) {
   const dailyChanges = calcDailyChanges(prices1y);
   const sigDays = findSignificantChanges(dailyChanges);
   status.sig5 = { available: prices1y.length > 0 ? 1 : 0, total: 1, data: sigDays, count: sigDays.length };
+
+  const priceTarget = rawData.priceTarget;
+  status.analystTarget = { available: priceTarget?.targetConsensus ? 1 : 0, total: 1, data: priceTarget?.targetConsensus || null };
+
+  const rating = rawData.rating;
+  status.analystRating = { available: rating?.consensus ? 1 : 0, total: 1, data: rating?.consensus || null };
 
   return status;
 }
@@ -1370,6 +1378,10 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
     let detail = 'No data';
     if (item.key === 'sig5') {
       detail = hasData ? `${status.count} day${status.count !== 1 ? 's' : ''} with >5% change found` : 'No price data';
+    } else if (item.key === 'analystTarget') {
+      detail = hasData ? `$${fmtNum(status.data)}` : 'Not available';
+    } else if (item.key === 'analystRating') {
+      detail = hasData ? status.data : 'Not available';
     }
     return (
       <div key={item.key} className="checklist-item">
