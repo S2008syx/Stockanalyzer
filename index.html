@@ -541,24 +541,26 @@ async function fetchSegRevenue(ticker, key) {
   catch { return null; }
 }
 
-async function fetchPriceTargetConsensus(ticker, key) {
+async function fetchPriceTargetConsensus(ticker, finnhubKey) {
+  if (!finnhubKey) return null;
   try {
-    const d = await fmpGet(`/price-target?symbol=${ticker}`, key);
-    if (!Array.isArray(d) || d.length === 0) return null;
-    const targets = d.map(x => x.priceTarget).filter(v => v != null && !isNaN(v));
-    if (targets.length === 0) return null;
-    const avg = targets.reduce((a, b) => a + b, 0) / targets.length;
-    return { targetConsensus: Math.round(avg * 100) / 100, targetHigh: Math.max(...targets), targetLow: Math.min(...targets), count: targets.length };
+    const r = await fetch(`${FINNHUB}/stock/price-target?symbol=${ticker}&token=${finnhubKey}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d || !d.targetMean) return null;
+    return { targetConsensus: d.targetMean, targetHigh: d.targetHigh, targetLow: d.targetLow, targetMedian: d.targetMedian };
   } catch { return null; }
 }
 
-async function fetchRatingConsensus(ticker, key) {
+async function fetchRatingConsensus(ticker, finnhubKey) {
+  if (!finnhubKey) return null;
   try {
-    const d = await fmpGet(`/analyst-stock-recommendations/${ticker}`, key);
+    const r = await fetch(`${FINNHUB}/stock/recommendation?symbol=${ticker}&token=${finnhubKey}`);
+    if (!r.ok) return null;
+    const d = await r.json();
     if (!Array.isArray(d) || d.length === 0) return null;
     const latest = d[0];
-    const sb = latest.analystRatingsStrongBuy || 0, b = latest.analystRatingsBuy || 0;
-    const h = latest.analystRatingsHold || 0, s = latest.analystRatingsSell || 0, ss = latest.analystRatingsStrongSell || 0;
+    const sb = latest.strongBuy || 0, b = latest.buy || 0, h = latest.hold || 0, s = latest.sell || 0, ss = latest.strongSell || 0;
     const counts = { 'Strong Buy': sb, 'Buy': b, 'Hold': h, 'Sell': s, 'Strong Sell': ss };
     const consensus = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
     return { strongBuy: sb, buy: b, hold: h, sell: s, strongSell: ss, consensus };
@@ -584,8 +586,8 @@ async function fetchAllStockData(ticker, keys) {
     fetchRatios(ticker, keys.fmp).then(d => results.ratios = d).catch(() => results.ratios = []),
     fetchGeoRevenue(ticker, keys.fmp).then(d => results.geo = d).catch(() => results.geo = null),
     fetchSegRevenue(ticker, keys.fmp).then(d => results.seg = d).catch(() => results.seg = null),
-    fetchPriceTargetConsensus(ticker, keys.fmp).then(d => results.priceTarget = d).catch(() => results.priceTarget = null),
-    fetchRatingConsensus(ticker, keys.fmp).then(d => results.rating = d).catch(() => results.rating = null),
+    fetchPriceTargetConsensus(ticker, keys.finnhub).then(d => results.priceTarget = d).catch(() => results.priceTarget = null),
+    fetchRatingConsensus(ticker, keys.finnhub).then(d => results.rating = d).catch(() => results.rating = null),
   ];
   await Promise.all(tasks);
   // Stable API profile lacks eps & sharesOutstanding; derive from other data
