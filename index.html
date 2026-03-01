@@ -692,10 +692,10 @@ Current Price: $${stockInfo.price || 'N/A'}, PE: ${stockInfo.pe || 'N/A'}, Marke
 
 Provide EXACTLY this JSON (no markdown, no code fences):
 {
-  "pros": ["Investment pro point 1", "Pro point 2", "Pro point 3"],
-  "cons": ["Investment con/risk point 1", "Con point 2", "Con point 3"]
+  "pros": ["Company fundamental pro 1", "Company fundamental pro 2", "Macro-economic pro (e.g. US economy, interest rates, fiscal policy)"],
+  "cons": ["Company fundamental con 1", "Company fundamental con 2", "Macro-economic con (e.g. US economy, interest rates, fiscal policy)"]
 }
-Each point should be a concise sentence (8-15 words). Focus on investment-relevant factors.`;
+Rules: The first 2 pros and first 2 cons must be about the company's own fundamentals (revenue, margins, competitive position, management, valuation, etc.). The 3rd pro and 3rd con must be about macro-economic factors (US economy, interest rates, inflation, trade policy, etc.) and how they specifically impact this company. Each point should be a concise sentence (8-15 words).`;
   const text = await callAI(prompt, apiKeys, 512);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('AI returned an unexpected response format.');
@@ -1814,13 +1814,19 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
             {prosConsLoading && <div className="ai-loading"><Spinner /> Generating pros & cons...</div>}
             {prosConsError && <div className="ai-loading" style={{ color: 'var(--danger)' }}>Error: {prosConsError}</div>}
             {prosCons && (
-              <div className="ai-bullets">
-                {(prosCons.pros || []).map((p, i) => (
-                  <div key={'pro' + i} className="ai-bullet ai-pro">{'\u2705'} {p}</div>
-                ))}
-                {(prosCons.cons || []).map((c, i) => (
-                  <div key={'con' + i} className="ai-bullet ai-con">{'\u274C'} {c}</div>
-                ))}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Pros</div>
+                  {(prosCons.pros || []).map((p, i) => (
+                    <div key={'pro' + i} className="ai-bullet ai-pro" style={{ marginBottom: 6 }}>{'\u2705'} {p}</div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--danger)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Cons</div>
+                  {(prosCons.cons || []).map((c, i) => (
+                    <div key={'con' + i} className="ai-bullet ai-con" style={{ marginBottom: 6 }}>{'\u274C'} {c}</div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
