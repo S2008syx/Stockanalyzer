@@ -1379,9 +1379,61 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
     if (item.key === 'sig5') {
       detail = hasData ? `${status.count} day${status.count !== 1 ? 's' : ''} with >5% change found` : 'No price data';
     } else if (item.key === 'analystTarget') {
-      detail = hasData ? `$${fmtNum(status.data)}` : 'Not available';
+      const userVal = userInputs[item.key];
+      const filled = hasData || (userVal != null && userVal !== '');
+      return (
+        <div key={item.key} className="checklist-item">
+          <div className="checklist-item-header">
+            <span className={filled ? 'checklist-ok' : 'checklist-miss'}>
+              {filled ? '\u2713' : '\u2717'}
+            </span>
+            <span className="checklist-label">{item.label}</span>
+            {hasData ? (
+              <span className="checklist-detail">${fmtNum(status.data)}</span>
+            ) : (
+              <input
+                className="input input-sm"
+                style={{ width: 140 }}
+                placeholder="Enter target price"
+                type="number"
+                step="any"
+                value={userInputs[item.key] || ''}
+                onChange={e => handleSingleChange(item.key, e.target.value)}
+              />
+            )}
+          </div>
+        </div>
+      );
     } else if (item.key === 'analystRating') {
-      detail = hasData ? status.data : 'Not available';
+      const userVal = userInputs[item.key];
+      const filled = hasData || (userVal != null && userVal !== '');
+      return (
+        <div key={item.key} className="checklist-item">
+          <div className="checklist-item-header">
+            <span className={filled ? 'checklist-ok' : 'checklist-miss'}>
+              {filled ? '\u2713' : '\u2717'}
+            </span>
+            <span className="checklist-label">{item.label}</span>
+            {hasData ? (
+              <span className="checklist-detail">{status.data}</span>
+            ) : (
+              <select
+                className="input input-sm"
+                style={{ width: 160 }}
+                value={userInputs[item.key] || ''}
+                onChange={e => setUserInputs(prev => ({ ...prev, [item.key]: e.target.value }))}
+              >
+                <option value="">-- Select --</option>
+                <option value="Strong Buy">Strong Buy</option>
+                <option value="Buy">Buy</option>
+                <option value="Hold">Hold</option>
+                <option value="Sell">Sell</option>
+                <option value="Strong Sell">Strong Sell</option>
+              </select>
+            )}
+          </div>
+        </div>
+      );
     }
     return (
       <div key={item.key} className="checklist-item">
@@ -2260,9 +2312,9 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     ebitda: checklist.ebitda15?.data?.length > 0 ? [...checklist.ebitda15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
     fcf: checklist.fcf15?.data?.length > 0 ? [...checklist.fcf15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
     shares: profile.sharesOutstanding || null,
-    analystTarget: rawData.priceTarget?.targetConsensus || null,
-    analystRating: rawData.rating?.consensus || null,
-  }), [profile, checklist, rawData]);
+    analystTarget: rawData.priceTarget?.targetConsensus || (userInputs?.analystTarget ? Number(userInputs.analystTarget) : null),
+    analystRating: rawData.rating?.consensus || userInputs?.analystRating || null,
+  }), [profile, checklist, rawData, userInputs]);
 
   // Save overrides to localStorage when they change
   useEffect(() => {
