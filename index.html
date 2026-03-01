@@ -1062,7 +1062,7 @@ function ApiKeyModal({ keys, onSave }) {
             </div>
           )}
           <div className="input-group">
-            <label className="input-label">Finnhub API Key (optional, for targeted news)</label>
+            <label className="input-label">Finnhub API Key (for analyst data & targeted news)</label>
             <input className="input" value={finnhub} onChange={e => setFinnhub(e.target.value)} placeholder="Finnhub API key (optional)" />
           </div>
         </div>
@@ -1501,7 +1501,7 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
 // ============================================================
 // SECTION 9: METRICS TABLE (2xN Grid with editable fields)
 // ============================================================
-function MetricsTable({ data, overrides, onOverrideChange }) {
+function MetricsTable({ data, overrides, onOverrideChange, finnhubKey, onFinnhubKeySubmit, analystLoading }) {
   const price = overrides.price != null ? Number(overrides.price) : data.price;
   const eps = overrides.eps != null ? Number(overrides.eps) : data.eps;
   const egr = overrides.egr != null ? Number(overrides.egr) : (data.egr || null);
@@ -1514,6 +1514,28 @@ function MetricsTable({ data, overrides, onOverrideChange }) {
   const forwardPE = calcForwardPE(price, eps, egr);
   const marketCap = calcMarketCap(price, shares);
 
+  const [fhKeyInput, setFhKeyInput] = useState('');
+  const [fhTesting, setFhTesting] = useState(false);
+  const [fhFeedback, setFhFeedback] = useState(null);
+
+  async function handleFhKeySubmit() {
+    if (!fhKeyInput.trim()) return;
+    setFhTesting(true);
+    setFhFeedback(null);
+    try {
+      const r = await fetch(`${FINNHUB}/quote?symbol=AAPL&token=${fhKeyInput.trim()}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setFhFeedback({ type: 'success', msg: 'Key verified! Fetching data...' });
+      onFinnhubKeySubmit(fhKeyInput.trim());
+    } catch (e) {
+      setFhFeedback({ type: 'error', msg: `Invalid key — ${e.message}` });
+    } finally {
+      setFhTesting(false);
+    }
+  }
+
   const fields = [
     { key: 'price', label: 'Price', value: price, fmt: v => '$' + fmtNum(v), editable: true, calc: null },
     { key: 'pe', label: 'PE Ratio', value: pe, fmt: v => fmtNum(v), editable: false, calc: 'Price / EPS' },
@@ -1525,8 +1547,8 @@ function MetricsTable({ data, overrides, onOverrideChange }) {
     { key: 'egr', label: 'Exp. Growth Rate (%)', value: egr, fmt: v => fmtNum(v) + '%', editable: true, calc: null },
     { key: 'forwardPE', label: 'Forward PE', value: forwardPE, fmt: v => fmtNum(v), editable: false, calc: 'Price / (EPS\u00D7(1+EGR))' },
     { key: 'shares', label: 'Shares Outstanding', value: shares, fmt: v => fmtBigNum(v), editable: !sharesFromApi, calc: null },
-    { key: 'analystTarget', label: 'Analyst Target Price', value: data.analystTarget, fmt: v => '$' + fmtNum(v), editable: false, calc: null },
-    { key: 'analystRating', label: 'Analyst Rating', value: data.analystRating, fmt: v => v, editable: false, calc: null },
+    { key: 'analystTarget', label: 'Analyst Target Price', value: data.analystTarget, fmt: v => '$' + fmtNum(v), editable: false, calc: null, analyst: true },
+    { key: 'analystRating', label: 'Analyst Rating', value: data.analystRating, fmt: v => v, editable: false, calc: null, analyst: true },
   ];
 
   function handleChange(key, val) {
@@ -1534,6 +1556,39 @@ function MetricsTable({ data, overrides, onOverrideChange }) {
     const num = Number(val);
     if (isNaN(num)) return;
     onOverrideChange(key, num);
+  }
+
+  // Render the Finnhub key inline prompt for analyst cards
+  function renderFhKeyPrompt() {
+    return (
+      <div style={{ marginTop: 6 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>
+          No Finnhub API key. Enter below:
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <input
+            className="input"
+            type="password"
+            placeholder="Finnhub key"
+            value={fhKeyInput}
+            onChange={e => { setFhKeyInput(e.target.value); if (fhFeedback) setFhFeedback(null); }}
+            onKeyDown={e => { if (e.key === 'Enter') handleFhKeySubmit(); }}
+            style={{ flex: 1, fontSize: 11, padding: '3px 6px', height: 26 }}
+          />
+          <button
+            className="btn btn-primary"
+            disabled={!fhKeyInput.trim() || fhTesting}
+            onClick={handleFhKeySubmit}
+            style={{ fontSize: 10, padding: '2px 8px', height: 26, whiteSpace: 'nowrap' }}
+          >{fhTesting ? '...' : 'Submit'}</button>
+        </div>
+        {fhFeedback && (
+          <div style={{ fontSize: 10, marginTop: 3, color: fhFeedback.type === 'success' ? '#4ADE80' : '#F87171' }}>
+            {fhFeedback.msg}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -1550,6 +1605,10 @@ function MetricsTable({ data, overrides, onOverrideChange }) {
               placeholder="-"
               onChange={e => handleChange(f.key, e.target.value)}
             />
+          ) : f.analyst && f.value == null && !finnhubKey ? (
+            renderFhKeyPrompt()
+          ) : f.analyst && f.value == null && analystLoading ? (
+            <div className="metric-value"><Spinner /></div>
           ) : (
             <div className="metric-value">{f.value != null ? f.fmt(f.value) : '-'}</div>
           )}
@@ -2285,6 +2344,9 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [keyVersion, setKeyVersion] = useState(0);
+  const [localPriceTarget, setLocalPriceTarget] = useState(rawData.priceTarget);
+  const [localRating, setLocalRating] = useState(rawData.rating);
+  const [analystLoading, setAnalystLoading] = useState(false);
 
   const profile = rawData.profile || {};
   const prices1y = rawData.prices1y || [];
@@ -2328,9 +2390,9 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     ebitda: checklist.ebitda15?.data?.length > 0 ? [...checklist.ebitda15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
     fcf: checklist.fcf15?.data?.length > 0 ? [...checklist.fcf15.data].sort((a, b) => b.year.localeCompare(a.year))[0].value : null,
     shares: profile.sharesOutstanding || null,
-    analystTarget: rawData.priceTarget?.targetConsensus || (userInputs?.analystTarget ? Number(userInputs.analystTarget) : null),
-    analystRating: rawData.rating?.consensus || userInputs?.analystRating || null,
-  }), [profile, checklist, rawData, userInputs]);
+    analystTarget: localPriceTarget?.targetConsensus || (userInputs?.analystTarget ? Number(userInputs.analystTarget) : null),
+    analystRating: localRating?.consensus || userInputs?.analystRating || null,
+  }), [profile, checklist, localPriceTarget, localRating, userInputs]);
 
   // Save overrides to localStorage when they change
   useEffect(() => {
@@ -2384,12 +2446,24 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     setKeyVersion(v => v + 1);
   }
 
-  // Handle Finnhub key submission from FinnhubKeyPrompt (key already validated)
-  function handleFinnhubSubmit(finnhubKey) {
+  // Handle Finnhub key submission — sync everywhere + re-fetch analyst data
+  async function handleFinnhubSubmit(finnhubKey) {
     const newKeys = { ...localApiKeys, finnhub: finnhubKey };
     setLocalApiKeys(newKeys);
     if (onUpdateApiKeys) onUpdateApiKeys(newKeys); // sync to App state + localStorage
     setKeyVersion(v => v + 1);
+    // Re-fetch analyst data with the new key
+    setAnalystLoading(true);
+    try {
+      const [pt, rt] = await Promise.all([
+        fetchPriceTargetConsensus(stock.ticker, finnhubKey),
+        fetchRatingConsensus(stock.ticker, finnhubKey),
+      ]);
+      if (pt) setLocalPriceTarget(pt);
+      if (rt) setLocalRating(rt);
+    } catch {} finally {
+      setAnalystLoading(false);
+    }
   }
 
   // Fetch AI insights after mount or after key is set
@@ -2467,6 +2541,9 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
             data={metricsData}
             overrides={overrides}
             onOverrideChange={handleOverrideChange}
+            finnhubKey={localApiKeys.finnhub}
+            onFinnhubKeySubmit={handleFinnhubSubmit}
+            analystLoading={analystLoading}
           />
 
           <AiInsightsPanel
