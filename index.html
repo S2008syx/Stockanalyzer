@@ -1102,6 +1102,11 @@ function buildChecklist(rawData) {
   })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
   status.ebitda15 = buildHistoryStatus(ebitdaYears, yearList);
 
+  const epsYears = income.map(d => ({
+    year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null), value: d.epsDiluted ?? d.eps
+  })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  status.eps15 = buildHistoryStatus(epsYears, yearList);
+
   const mcYears = ev.map(d => ({
     year: d.date ? d.date.slice(0, 4) : null, value: d.marketCapitalization
   })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
@@ -2554,8 +2559,10 @@ function MissingDataFooter({ checklist }) {
 // ============================================================
 // SECTION 16: SUPPLEMENT CHARTS SECTION
 // ============================================================
-function SupplementSection({ mktCapEbitda }) {
+function SupplementSection({ mktCapEbitda, epsSeries, psSeries, ebitdaSeries, expectedYears }) {
   const [open, setOpen] = useState(false);
+  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (ebitdaSeries || []).length, (mktCapEbitda || []).length);
+  const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
   return (
     <div className="supplement">
       <button className="supplement-toggle" onClick={() => setOpen(!open)}>
@@ -2565,8 +2572,11 @@ function SupplementSection({ mktCapEbitda }) {
       {open && (
         <div className="supplement-body">
           <div className="charts-grid">
+            <HistoryChart title={`${tag} EPS`} series={epsSeries || []} yLabel="EPS" color="#F472B6" formatFn={v => '$' + fmtNum(v, 2)} />
+            <HistoryChart title={`${tag} PS Ratio`} series={psSeries || []} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
+            <HistoryChart title={`${tag} EBITDA`} series={ebitdaSeries || []} yLabel="EBITDA" color="#60A5FA" formatFn={v => '$' + fmtBigNum(v)} />
             <HistoryChart
-              title="15Y Market Cap / EBITDA Ratio"
+              title={`${tag} Market Cap / EBITDA`}
               series={(mktCapEbitda || []).map(d => ({ year: d.year, value: d.ratio }))}
               yLabel="MktCap/EBITDA"
               color="#7c3aed"
@@ -2743,6 +2753,11 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     return mergeHistoryInputs(checklist.ps15?.data || [], 'ps15');
   }, [checklist, userInputs]);
 
+  // EPS series
+  const epsSeries = useMemo(() => {
+    return mergeHistoryInputs(checklist.eps15?.data || [], 'eps15');
+  }, [checklist, userInputs]);
+
   // EBITDA series
   const ebitdaSeries = useMemo(() => {
     return mergeHistoryInputs(checklist.ebitda15?.data || [], 'ebitda15', v => v * 1e9);
@@ -2910,15 +2925,13 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
               return <>
                 <HistoryChart title={`${tag} PE Ratio`} series={peSeries} yLabel="PE" color="#4ADE80" formatFn={v => safePE(v).toString()} />
                 <HistoryChart title={`${tag} Market Cap`} series={mktcapSeries} yLabel="Mkt Cap" color="#FB923C" formatFn={v => '$' + fmtBigNum(v)} />
-                <HistoryChart title={`${tag} EBITDA`} series={ebitdaSeries} yLabel="EBITDA" color="#60A5FA" formatFn={v => '$' + fmtBigNum(v)} />
-                <HistoryChart title={`${tag} PS Ratio`} series={psSeries} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
                 <HistoryChart title={`${tag} Free Cash Flow`} series={fcfSeries} yLabel="FCF" color="#22D3EE" formatFn={v => '$' + fmtBigNum(v)} />
                 <PriceAlertChart prices1y={prices1y} significantDays={significantDays} />
               </>;
             })()}
           </div>
 
-          <SupplementSection mktCapEbitda={mktCapEbitda} />
+          <SupplementSection mktCapEbitda={mktCapEbitda} epsSeries={epsSeries} psSeries={psSeries} ebitdaSeries={ebitdaSeries} expectedYears={checklist._meta?.expectedYears} />
 
           <DistributionSection geo={geo} seg={seg} />
 
