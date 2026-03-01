@@ -675,12 +675,10 @@ FCF: $${fmtBigNum(stockInfo.fcf)}
 
 Provide your analysis in this EXACT JSON format (no markdown, no code fences, just raw JSON):
 {
-  "summary": "Three Word Summary",
-  "sentiment": "Three Word Sentiment",
-  "intro": "One sentence introduction about the company and its current position.",
-  "pros": ["Pro point 1", "Pro point 2", "Pro point 3"],
-  "cons": ["Con point 1", "Con point 2", "Con point 3"]
-}`;
+  "oneliner": "One sentence that captures what this company IS at its core — highlight the 1-2 most important things it does. E.g. Apple: 'A company selling phones and a software derivative ecosystem.' Amazon: 'Cloud infrastructure and online retail.' Tesla: 'Electric cars and autonomous driving.' Be specific and concise.",
+  "segments": ["Largest revenue/business segment", "Second largest", "Third largest", "Fourth if applicable", "Fifth if applicable"]
+}
+The segments array should list 3 to 5 main business segments ordered from largest to smallest revenue contribution. Each item is a short phrase (2-6 words).`;
   const text = await callAI(prompt, apiKeys);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('AI returned an unexpected response format. Please try again.');
@@ -1701,17 +1699,12 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
   return (
     <div className="ai-panel">
       <h3>AI Insights</h3>
-      <div className="ai-tags">
-        <span className="ai-tag ai-tag-blue">{insights.summary || '...'}</span>
-        <span className="ai-tag ai-tag-amber">{insights.sentiment || '...'}</span>
-      </div>
-      <p className="ai-intro">{insights.intro || ''}</p>
+      <p className="ai-intro" style={{ fontWeight: 600, fontSize: '1.05em', margin: '8px 0 12px' }}>{insights.oneliner || ''}</p>
       <div className="ai-bullets">
-        {(insights.pros || []).map((p, i) => (
-          <div key={'pro' + i} className="ai-bullet ai-pro">{'\u2705'} {p}</div>
-        ))}
-        {(insights.cons || []).map((c, i) => (
-          <div key={'con' + i} className="ai-bullet ai-con">{'\u274C'} {c}</div>
+        {(insights.segments || []).map((seg, i) => (
+          <div key={'seg' + i} className="ai-bullet" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'var(--accent)', fontWeight: 700, minWidth: 18 }}>{i + 1}.</span> {seg}
+          </div>
         ))}
       </div>
     </div>
