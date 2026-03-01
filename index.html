@@ -442,6 +442,7 @@ const PIE_COLORS = ['#4ADE80','#60A5FA','#A78BFA','#FB923C','#F87171','#22D3EE',
 // ============================================================
 // SECTION 2: LOCAL STORAGE
 // ============================================================
+function sanitizeKey(k) { return k ? k.trim().replace(/[^\x20-\x7E]/g, '') : ''; }
 function getStore(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
   catch { return fallback; }
@@ -608,7 +609,7 @@ async function callClaude(prompt, claudeKey, maxTokens = 1024) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': claudeKey,
+      'x-api-key': sanitizeKey(claudeKey),
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
@@ -632,7 +633,7 @@ async function callOpenRouter(prompt, openrouterKey, maxTokens = 1024) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${openrouterKey}`,
+      'Authorization': `Bearer ${sanitizeKey(openrouterKey)}`,
       'HTTP-Referer': window.location.origin,
       'X-OpenRouter-Title': 'Stock Analyzer',
     },
@@ -2041,7 +2042,7 @@ const GH_FILE_PATH = 'index.html';
 
 async function commitDefaultsToGitHub(ghToken, defaults) {
   const apiBase = `https://api.github.com/repos/${GH_REPO_OWNER}/${GH_REPO_NAME}/contents/${GH_FILE_PATH}`;
-  const headers = { 'Authorization': `token ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' };
+  const headers = { 'Authorization': `token ${sanitizeKey(ghToken)}`, 'Accept': 'application/vnd.github.v3+json' };
   // 1. Get current file (need sha)
   const getResp = await fetch(apiBase, { headers });
   if (!getResp.ok) throw new Error(`GitHub API error: ${getResp.status} ${await getResp.text()}`);
@@ -2078,7 +2079,7 @@ async function testClaudeKey(key) {
   try {
     const r = await fetch(CLAUDE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': sanitizeKey(key), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 5, messages: [{ role: 'user', content: 'Say ok' }] }),
     });
     if (!r.ok) { const err = await r.text().catch(() => ''); return { valid: false, msg: `HTTP ${r.status}` }; }
@@ -2091,7 +2092,7 @@ async function testOpenRouterKey(key) {
   try {
     const r = await fetch(OPENROUTER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'HTTP-Referer': window.location.origin },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sanitizeKey(key)}`, 'HTTP-Referer': window.location.origin },
       body: JSON.stringify({ model: 'anthropic/claude-haiku-4.5', max_tokens: 5, messages: [{ role: 'user', content: 'Say ok' }] }),
     });
     if (!r.ok) { const err = await r.text().catch(() => ''); return { valid: false, msg: `HTTP ${r.status}` }; }
