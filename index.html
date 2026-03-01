@@ -36,6 +36,19 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+    @keyframes proBounce {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.25); }
+      70%  { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+    @keyframes proShake {
+      0%, 100% { transform: translateX(0); }
+      25%      { transform: translateX(-3px); }
+      75%      { transform: translateX(3px); }
+    }
+    .pro-bounce { animation: proBounce 0.4s ease-out; }
+    .pro-shake  { animation: proShake 0.3s ease-out; }
     @keyframes slideProgress {
       0%   { left: -30%; width: 30%; }
       50%  { left: 40%;  width: 40%; }
@@ -2594,6 +2607,13 @@ function SupplementSection({ mktCapEbitda, epsSeries, psSeries, ebitdaSeries, ex
 // ============================================================
 function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode }) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [proReaction, setProReaction] = useState('');
+  function handleProToggle(e) {
+    const on = e.target.checked;
+    setProMode(on);
+    setProReaction(on ? 'pro-bounce' : 'pro-shake');
+    setTimeout(() => setProReaction(''), 400);
+  }
   function handleSelect(stock) {
     if (watchlist.some(w => w.ticker === stock.ticker)) return;
     const newList = [...watchlist, stock];
@@ -2627,8 +2647,8 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
         <div className="container">
           <SmartSearch apiKey={apiKeys.fmp} onSelect={handleSelect} />
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0', cursor: 'pointer', fontSize: 14, color: 'var(--text-sec)' }}>
-            <input type="checkbox" checked={proMode} onChange={e => setProMode(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
-            Are you a pro?
+            <input type="checkbox" checked={proMode} onChange={handleProToggle} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+            <span className={proReaction} style={{ display: 'inline-block' }}>Are you a pro?</span>
             <span style={{ fontSize: 12, opacity: 0.7 }}>(enables manual data review before analysis)</span>
           </label>
           {watchlist.length === 0 ? (
