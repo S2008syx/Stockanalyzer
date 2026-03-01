@@ -881,7 +881,7 @@ Provide your analysis in this EXACT JSON format (no markdown, no code fences, ju
   "segments": ["Largest revenue/business segment", "Second largest", "Third largest", "Fourth if applicable", "Fifth if applicable"],
   "growth": "Return exactly 3 lines, each prefixed with its number. Do NOT use any markdown formatting such as ** or * or bold. Use plain text only. Format:\n1. [Analyst/Institution 1] expects X%, [Analyst/Institution 2] expects Y%, [Analyst/Institution 3] expects Z% — average expected growth rate is W%.\n2. [Combined reasoning from all three: catalysts, tailwinds, market trends that drive their growth expectations.]\n3. [Main downside risks or negative factors that could cause actual growth to fall below expectations.]\nUse real, credible analysts or institutions (e.g. Goldman Sachs, Morgan Stanley, JP Morgan, Bank of America, UBS, etc.) who cover this stock."
 }
-The segments array should list 3 to 5 main business segments ordered from largest to smallest revenue contribution. Each item is a short phrase (2-6 words).`;
+The segments array should list 3 to 5 main business segments ordered from largest to smallest revenue contribution. Each item is a short phrase (2-6 words). Do NOT use any markdown formatting such as ** or * or bold or emoji anywhere in the JSON values. Use plain text only.`;
   const result = await callAIWithSearch(prompt, apiKeys);
   const text = typeof result === 'string' ? result : result.text;
   const jsonStr = extractJSON(text);
@@ -909,7 +909,7 @@ Rules:
 - pros[0] and cons[0]: company fundamentals (revenue, margins, competitive position, management, valuation, etc.).
 - pros[1] and cons[1]: how AI (artificial intelligence trends, AI adoption, AI competition, AI disruption) specifically impacts this company — as an opportunity (pro) or threat (con).
 - pros[2] and cons[2]: macro-economic factors (US economy, interest rates, inflation, trade policy, tariffs, etc.) and how they specifically impact this company.
-Each point should be a concise sentence (8-15 words).`;
+Each point should be a concise sentence (8-15 words). Do NOT use any markdown formatting such as ** or * or bold or ## or emoji. Use plain text only.`;
   const result = await callAIWithSearch(prompt, apiKeys, 512);
   const text = typeof result === 'string' ? result : result.text;
   const jsonStr = extractJSON(text);
@@ -938,7 +938,8 @@ If the question IS related to stocks/finance/investing:
 - Search the web for the latest, most up-to-date information to give an accurate answer.
 - Write in plain, conversational English that anyone can understand.
 - Keep your answer concise (under 150 words) but informative.
-- Use specific numbers and data when available.`;
+- Use specific numbers and data when available.
+- Do NOT use any markdown formatting such as ** or * or bold or ## or emoji. Use plain text only. Use numbered lists (1. 2. 3.) for structure.`;
   const result = await callAIWithSearch(prompt, apiKeys, 512);
   return result;
 }
@@ -1226,15 +1227,15 @@ function buildChecklist(rawData) {
 // SECTION 5: REACT COMPONENTS
 // ============================================================
 
-// Render **bold** markdown as React elements (avoids dangerouslySetInnerHTML)
-function renderMarkdownBold(text) {
-  const parts = text.split(/(\*\*.+?\*\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return React.createElement('strong', { key: i, style: { color: '#E2E8F0' } }, part.slice(2, -2));
-    }
-    return part;
-  });
+// Strip markdown formatting (**, *, ##, emoji) from AI text
+function stripMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/(?<!\w)\*(.+?)\*(?!\w)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{2B55}\u{FE00}-\u{FE0F}\u{200D}]/gu, '')
+    .trim();
 }
 
 // --- Spinner ---
@@ -2163,7 +2164,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
     <div className="ai-panel">
       <h3>AI Insights</h3>
       {/* Company intro */}
-      <p className="ai-intro">{insights.oneliner || ''}</p>
+      <p className="ai-intro">{stripMarkdown(insights.oneliner || '')}</p>
       <div className="ai-bullets">
         {(insights.segments || []).map((seg, i) => (
           <div key={'seg' + i} className="ai-bullet">
@@ -2179,7 +2180,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
           <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--blue)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Analyst Growth Expectations</h4>
           <div style={{ fontSize: '0.93em', color: 'var(--text-sec)', lineHeight: 1.7, margin: 0 }}>
             {insights.growth.split('\n').filter(l => l.trim()).map((line, i) => (
-              <p key={i} style={{ margin: '0 0 6px 0' }}>{renderMarkdownBold(line)}</p>
+              <p key={i} style={{ margin: '0 0 6px 0' }}>{stripMarkdown(line)}</p>
             ))}
           </div>
         </div>
@@ -2215,7 +2216,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
                     {pros.map((p, i) => (
                       <div key={'pro' + i} style={{ marginBottom: 8 }}>
                         <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>{cats[i] || ''}</div>
-                        <div className="ai-bullet ai-pro">{'\u2705'} {p}</div>
+                        <div className="ai-bullet ai-pro">{'\u2705'} {stripMarkdown(p)}</div>
                       </div>
                     ))}
                   </div>
@@ -2224,7 +2225,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
                     {cons.map((c, i) => (
                       <div key={'con' + i} style={{ marginBottom: 8 }}>
                         <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>{cats[i] || ''}</div>
-                        <div className="ai-bullet ai-con">{'\u274C'} {c}</div>
+                        <div className="ai-bullet ai-con">{'\u274C'} {stripMarkdown(c)}</div>
                       </div>
                     ))}
                   </div>
@@ -2251,7 +2252,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
                   : { background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.12)', color: 'var(--text)', alignSelf: 'flex-start', maxWidth: '85%' }
                 ),
               }}>
-                {m.text}
+                {m.role === 'ai' ? stripMarkdown(m.text) : m.text}
                 {m.sources && m.sources.length > 0 && (
                   <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(74,222,128,0.12)', fontSize: '0.8em' }}>
                     <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Sources:</span>
