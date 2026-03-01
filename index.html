@@ -1207,7 +1207,64 @@ function ApiKeyModal({ keys, onSave }) {
   const [openrouter, setOpenrouter] = useState(keys.openrouter || '');
   const [aiProvider, setAiProvider] = useState(keys.aiProvider || 'claude');
   const [finnhub, setFinnhub] = useState(keys.finnhub || '');
-  const aiKeyValid = aiProvider === 'claude' ? !!claude : !!openrouter;
+  // Test state per key: null | 'testing' | { ok: true } | { ok: false, msg }
+  const [testFmp, setTestFmp] = useState(null);
+  const [testClaude, setTestClaude] = useState(null);
+  const [testOpenrouter, setTestOpenrouter] = useState(null);
+  const [testFinnhub, setTestFinnhub] = useState(null);
+
+  async function handleTestFmp() {
+    if (!fmp.trim()) return;
+    setTestFmp('testing');
+    try {
+      const r = await fetch(`${FMP_STABLE}/profile?symbol=AAPL&apikey=${fmp.trim()}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      if (!d || (Array.isArray(d) && d.length === 0)) throw new Error('Empty response');
+      setTestFmp({ ok: true });
+    } catch (e) { setTestFmp({ ok: false, msg: e.message }); }
+  }
+
+  async function handleTestClaude() {
+    if (!claude.trim()) return;
+    setTestClaude('testing');
+    try {
+      await callClaude('Say "ok" in one word.', claude.trim(), 10);
+      setTestClaude({ ok: true });
+    } catch (e) { setTestClaude({ ok: false, msg: e.message }); }
+  }
+
+  async function handleTestOpenrouter() {
+    if (!openrouter.trim()) return;
+    setTestOpenrouter('testing');
+    try {
+      await callOpenRouter('Say "ok" in one word.', openrouter.trim(), 10);
+      setTestOpenrouter({ ok: true });
+    } catch (e) { setTestOpenrouter({ ok: false, msg: e.message }); }
+  }
+
+  async function handleTestFinnhub() {
+    if (!finnhub.trim()) return;
+    setTestFinnhub('testing');
+    try {
+      const r = await fetch(`${FINNHUB}/quote?symbol=AAPL&token=${finnhub.trim()}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      if (!d.c && d.c !== 0) throw new Error('No data returned');
+      setTestFinnhub({ ok: true });
+    } catch (e) { setTestFinnhub({ ok: false, msg: e.message }); }
+  }
+
+  function testBadge(state) {
+    if (!state) return null;
+    if (state === 'testing') return <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}><Spinner /> Testing...</span>;
+    if (state.ok) return <span style={{ fontSize: 11, color: 'var(--success)', marginTop: 4, fontWeight: 600 }}>{'\u2713'} Accessible</span>;
+    return <span style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4, fontWeight: 600 }}>{'\u2717'} {state.msg}</span>;
+  }
+
+  const testBtnStyle = { whiteSpace: 'nowrap', flexShrink: 0, height: 38 };
+
   return (
     <div className="modal-overlay">
       <div className="modal modal-sm">
@@ -1218,8 +1275,12 @@ function ApiKeyModal({ keys, onSave }) {
         <div className="modal-body">
           <div className="input-group mb-4">
             <label className="input-label">Financial Modeling Prep (FMP) API Key *</label>
-            <input className="input" value={fmp} onChange={e => setFmp(e.target.value)} placeholder="Your FMP API key" />
-            {fmp && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {fmp}</span>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="input" value={fmp} onChange={e => { setFmp(e.target.value); setTestFmp(null); }} placeholder="Your FMP API key" style={{ flex: 1 }} />
+              <button className="btn btn-outline btn-sm" disabled={!fmp.trim() || testFmp === 'testing'} onClick={handleTestFmp} style={testBtnStyle}>Test</button>
+            </div>
+            {fmp && !testFmp && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {fmp}</span>}
+            {testBadge(testFmp)}
           </div>
           <div className="input-group mb-4">
             <label className="input-label">AI Provider *</label>
@@ -1243,24 +1304,36 @@ function ApiKeyModal({ keys, onSave }) {
           {aiProvider === 'claude' && (
             <div className="input-group mb-4">
               <label className="input-label">Anthropic Claude API Key *</label>
-              <input className="input" value={claude} onChange={e => setClaude(e.target.value)} placeholder="sk-ant-..." type="password" />
-              {claude && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {claude.slice(0, 10)}...{claude.slice(-4)}</span>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="input" value={claude} onChange={e => { setClaude(e.target.value); setTestClaude(null); }} placeholder="sk-ant-..." type="password" style={{ flex: 1 }} />
+                <button className="btn btn-outline btn-sm" disabled={!claude.trim() || testClaude === 'testing'} onClick={handleTestClaude} style={testBtnStyle}>Test</button>
+              </div>
+              {claude && !testClaude && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {claude.slice(0, 10)}...{claude.slice(-4)}</span>}
+              {testBadge(testClaude)}
             </div>
           )}
           {aiProvider === 'openrouter' && (
             <div className="input-group mb-4">
               <label className="input-label">OpenRouter API Key *</label>
-              <input className="input" value={openrouter} onChange={e => setOpenrouter(e.target.value)} placeholder="sk-or-..." type="password" />
-              {openrouter && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {openrouter.slice(0, 10)}...{openrouter.slice(-4)}</span>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="input" value={openrouter} onChange={e => { setOpenrouter(e.target.value); setTestOpenrouter(null); }} placeholder="sk-or-..." type="password" style={{ flex: 1 }} />
+                <button className="btn btn-outline btn-sm" disabled={!openrouter.trim() || testOpenrouter === 'testing'} onClick={handleTestOpenrouter} style={testBtnStyle}>Test</button>
+              </div>
+              {openrouter && !testOpenrouter && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {openrouter.slice(0, 10)}...{openrouter.slice(-4)}</span>}
+              {testBadge(testOpenrouter)}
               <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                Get your key at openrouter.ai ÃÂ¢ÃÂÃÂ Q&A uses Claude Sonnet via OpenRouter
+                Q&A uses Claude Sonnet via OpenRouter
               </span>
             </div>
           )}
           <div className="input-group">
             <label className="input-label">Finnhub API Key (for analyst data & targeted news)</label>
-            <input className="input" value={finnhub} onChange={e => setFinnhub(e.target.value)} placeholder="Finnhub API key" />
-            {finnhub && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {finnhub}</span>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="input" value={finnhub} onChange={e => { setFinnhub(e.target.value); setTestFinnhub(null); }} placeholder="Finnhub API key" style={{ flex: 1 }} />
+              <button className="btn btn-outline btn-sm" disabled={!finnhub.trim() || testFinnhub === 'testing'} onClick={handleTestFinnhub} style={testBtnStyle}>Test</button>
+            </div>
+            {finnhub && !testFinnhub && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {finnhub}</span>}
+            {testBadge(testFinnhub)}
           </div>
         </div>
         <div className="modal-footer">
