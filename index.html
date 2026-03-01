@@ -2035,6 +2035,32 @@ function SupplementSection({ mktCapEbitda }) {
 // SECTION 16B: DEVELOPER TOOLS PANEL
 // ============================================================
 const DEV_PIN = '080523';
+const GH_REPO_OWNER = 'S2008syx';
+const GH_REPO_NAME = 'Stockanalyzer';
+const GH_FILE_PATH = 'index.html';
+
+async function commitDefaultsToGitHub(ghToken, defaults) {
+  const apiBase = `https://api.github.com/repos/${GH_REPO_OWNER}/${GH_REPO_NAME}/contents/${GH_FILE_PATH}`;
+  const headers = { 'Authorization': `token ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' };
+  // 1. Get current file (need sha)
+  const getResp = await fetch(apiBase, { headers });
+  if (!getResp.ok) throw new Error(`GitHub API error: ${getResp.status} ${await getResp.text()}`);
+  const fileData = await getResp.json();
+  const content = atob(fileData.content.replace(/\n/g, ''));
+  // 2. Replace the hardcoded defaults line
+  const pattern = /const hardcoded\s*=\s*\{[^}]*\}/;
+  const replacement = `const hardcoded = { fmp: '${(defaults.fmp || '').replace(/'/g, "\\'")}', claude: '${(defaults.claude || '').replace(/'/g, "\\'")}', finnhub: '${(defaults.finnhub || '').replace(/'/g, "\\'")}', openrouter: '${(defaults.openrouter || '').replace(/'/g, "\\'")}' }`;
+  if (!pattern.test(content)) throw new Error('Could not find hardcoded defaults in source file');
+  const updated = content.replace(pattern, replacement);
+  // 3. Commit
+  const putResp = await fetch(apiBase, {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: 'Update default API keys via Developer Tools', content: btoa(unescape(encodeURIComponent(updated))), sha: fileData.sha }),
+  });
+  if (!putResp.ok) throw new Error(`GitHub commit failed: ${putResp.status} ${await putResp.text()}`);
+  return true;
+}
 
 async function testFmpKey(key) {
   if (!key) return { valid: false, msg: 'Key is empty' };
@@ -2091,7 +2117,10 @@ function DevToolsPanel({ onClose, onDefaultsSaved }) {
   const [defaults, setDefaults] = useState(getDevDefaults);
   const [status, setStatus] = useState({ fmp: null, claude: null, openrouter: null, finnhub: null });
   const [testing, setTesting] = useState({ fmp: false, claude: false, openrouter: false, finnhub: false });
+  const [ghToken, setGhToken] = useState(() => getStore('sa_gh_token', ''));
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   function handlePinSubmit() {
     if (pin === DEV_PIN) {
@@ -2135,25 +2164,21 @@ function DevToolsPanel({ onClose, onDefaultsSaved }) {
     setTesting(prev => ({ ...prev, [field]: false }));
   }
 
-  function handleSave() {
-    setDevDefaults(defaults);
-    setSaved(true);
-    if (onDefaultsSaved) onDefaultsSaved();
-    // Persist defaults into the HTML file itself by downloading an updated copy
+  async function handleSave() {
+    if (!ghToken) { setSaveError('GitHub Token is required to save globally.'); return; }
+    setSaving(true);
+    setSaved(false);
+    setSaveError(null);
     try {
-      const html = document.documentElement.outerHTML;
-      const pattern = /const hardcoded\s*=\s*\{[^}]*\}/;
-      const replacement = `const hardcoded = { fmp: '${(defaults.fmp || '').replace(/'/g, "\\'")}', claude: '${(defaults.claude || '').replace(/'/g, "\\'")}', finnhub: '${(defaults.finnhub || '').replace(/'/g, "\\'")}', openrouter: '${(defaults.openrouter || '').replace(/'/g, "\\'")}' }`;
-      const updated = '<!DOCTYPE html>\n<html>' + html.replace(pattern, replacement) + '</html>';
-      const blob = new Blob([updated], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'index.html';
-      a.click();
-      URL.revokeObjectURL(url);
+      await commitDefaultsToGitHub(ghToken, defaults);
+      setStore('sa_gh_token', ghToken);
+      setDevDefaults(defaults);
+      setSaved(true);
+      if (onDefaultsSaved) onDefaultsSaved();
     } catch (e) {
-      console.warn('Could not generate updated HTML file:', e);
+      setSaveError(e.message || 'Failed to commit to GitHub');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2207,10 +2232,24 @@ function DevToolsPanel({ onClose, onDefaultsSaved }) {
         <div className="modal-header">
           <h2 style={{ fontSize: 18 }}>Developer Tools - System Defaults</h2>
           <p style={{ color: 'var(--text-dim)', fontSize: 12 }}>
-            Save will download an updated index.html with keys hardcoded in the file. Replace the old file to persist defaults permanently.
+            Save will commit updated defaults directly to GitHub, making changes global for all users.
           </p>
         </div>
         <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
+          <div className="input-group" style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
+            <label className="input-label" style={{ fontWeight: 700, color: 'var(--accent)' }}>GitHub Personal Access Token</label>
+            <input
+              className="input"
+              value={ghToken}
+              onChange={e => { setGhToken(e.target.value); setSaveError(null); }}
+              placeholder="ghp_xxxxxxxxxxxx"
+              type="password"
+              style={{ borderColor: ghToken ? 'var(--success)' : 'var(--border)', transition: 'border-color .2s' }}
+            />
+            <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+              Required for saving. Needs repo write access to {GH_REPO_OWNER}/{GH_REPO_NAME}.
+            </span>
+          </div>
           {keyFields.map(({ key, label, placeholder }) => {
             const s = status[key];
             const isTesting = testing[key];
@@ -2251,8 +2290,11 @@ function DevToolsPanel({ onClose, onDefaultsSaved }) {
         <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button className="btn btn-outline" onClick={onClose}>Close</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {saved && <span style={{ fontSize: 12, color: 'var(--success)' }}>Saved! Replace your index.html with the downloaded file.</span>}
-            <button className="btn btn-primary" onClick={handleSave}>Save Defaults</button>
+            {saveError && <span style={{ fontSize: 12, color: 'var(--danger)', maxWidth: 280 }}>{saveError}</span>}
+            {saved && <span style={{ fontSize: 12, color: 'var(--success)' }}>Committed to GitHub! Changes will be live after deploy.</span>}
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? 'Committing...' : 'Save to GitHub'}
+            </button>
           </div>
         </div>
       </div>
