@@ -449,7 +449,7 @@ function getStore(key, fallback) {
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 function getApiKeys() {
-  const defaults = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6hneg9r01qr5k4clmegd6hneg9r01qr5k4clmf0', openrouter: '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' };
+  const defaults = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6hneg9r01qr5k4clmegd6hneg9r01qr5k4clmf0', openrouter: '' };
   const base = { fmp: defaults.fmp, claude: defaults.claude, finnhub: defaults.finnhub, openrouter: defaults.openrouter, aiProvider: defaults.openrouter ? 'openrouter' : (defaults.claude ? 'claude' : 'openrouter') };
   const saved = getStore('sa_api_keys', null);
   return saved ? { ...base, ...saved } : base;
