@@ -475,6 +475,14 @@ function getOverrides(ticker) { return getStore('sa_ov_' + ticker, {}); }
 function setOverrides(ticker, o) { setStore('sa_ov_' + ticker, o); }
 function getUserInputs(ticker) { return getStore('sa_inputs_' + ticker, {}); }
 function saveUserInputs(ticker, inputs) { setStore('sa_inputs_' + ticker, inputs); }
+function getAiCache(ticker) { return getStore('sa_ai_' + ticker, null); }
+function setAiCache(ticker, data) { setStore('sa_ai_' + ticker, data); }
+function getPcCache(ticker) { return getStore('sa_pc_' + ticker, null); }
+function setPcCache(ticker, data) { setStore('sa_pc_' + ticker, data); }
+function getQaCache(ticker) { return getStore('sa_qa_' + ticker, []); }
+function setQaCache(ticker, msgs) { setStore('sa_qa_' + ticker, msgs); }
+function getAlertsCache(ticker) { return getStore('sa_alerts_' + ticker, null); }
+function setAlertsCache(ticker, data) { setStore('sa_alerts_' + ticker, data); }
 
 // ============================================================
 // SECTION 3: API FUNCTIONS
@@ -2019,11 +2027,12 @@ function AiKeyPrompt({ apiKeys, onKeySubmit }) {
 }
 
 function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeySubmit, stockInfo }) {
+  const ticker = stockInfo?.ticker;
   const [prosConsOpen, setProsConsOpen] = useState(false);
-  const [prosCons, setProsCons] = useState(null);
+  const [prosCons, setProsCons] = useState(() => ticker ? getPcCache(ticker) : null);
   const [prosConsLoading, setProsConsLoading] = useState(false);
   const [prosConsError, setProsConsError] = useState(null);
-  const [qaMessages, setQaMessages] = useState([]);
+  const [qaMessages, setQaMessages] = useState(() => ticker ? getQaCache(ticker) : []);
   const [qaInput, setQaInput] = useState('');
   const [qaLoading, setQaLoading] = useState(false);
   const qaEndRef = useRef(null);
@@ -2035,7 +2044,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
       setProsConsLoading(true);
       setProsConsError(null);
       fetchAiProsCons(stockInfo, apiKeys)
-        .then(d => { setProsCons(d); setProsConsError(null); })
+        .then(d => { setProsCons(d); if (ticker) setPcCache(ticker, d); setProsConsError(null); })
         .catch(e => setProsConsError(e.message))
         .finally(() => setProsConsLoading(false));
     }
@@ -2046,13 +2055,16 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
     const q = qaInput.trim();
     if (!q || qaLoading) return;
     setQaInput('');
-    setQaMessages(prev => [...prev, { role: 'user', text: q }]);
+    const userMsg = { role: 'user', text: q };
+    setQaMessages(prev => { const next = [...prev, userMsg]; if (ticker) setQaCache(ticker, next); return next; });
     setQaLoading(true);
     try {
       const result = await fetchAiStockAnswer(q, stockInfo, apiKeys);
-      setQaMessages(prev => [...prev, { role: 'ai', text: result.text, sources: result.sources || [] }]);
+      const aiMsg = { role: 'ai', text: result.text, sources: result.sources || [] };
+      setQaMessages(prev => { const next = [...prev, aiMsg]; if (ticker) setQaCache(ticker, next); return next; });
     } catch (err) {
-      setQaMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + err.message, sources: [] }]);
+      const errMsg = { role: 'ai', text: 'Error: ' + err.message, sources: [] };
+      setQaMessages(prev => { const next = [...prev, errMsg]; if (ticker) setQaCache(ticker, next); return next; });
     } finally {
       setQaLoading(false);
     }
@@ -2645,10 +2657,10 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     const saved = getOverrides(stock.ticker);
     return { ...saved };
   });
-  const [aiInsights, setAiInsights] = useState(null);
+  const [aiInsights, setAiInsights] = useState(() => getAiCache(stock.ticker));
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
-  const [alerts, setAlerts] = useState([]);
+  const [alerts, setAlerts] = useState(() => getAlertsCache(stock.ticker) || []);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [keyVersion, setKeyVersion] = useState(0);
   const [localPriceTarget, setLocalPriceTarget] = useState(rawData.priceTarget);
@@ -2777,9 +2789,11 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     }
   }
 
-  // Fetch AI insights after mount or after key is set
+  // Fetch AI insights after mount or after key is set (skip if cached)
   useEffect(() => {
     if (!hasAiKey(localApiKeys)) return;
+    const cached = getAiCache(stock.ticker);
+    if (cached) { setAiInsights(cached); return; }
     let cancelled = false;
     const price = overrides.price ?? metricsData.price;
     const eps = overrides.eps ?? metricsData.eps;
@@ -2794,16 +2808,18 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
       ebitda: metricsData.ebitda,
       fcf: metricsData.fcf,
     }, localApiKeys)
-      .then(d => { if (!cancelled) { setAiInsights(d); setAiError(null); } })
+      .then(d => { if (!cancelled) { setAiInsights(d); setAiCache(stock.ticker, d); setAiError(null); } })
       .catch(e => { if (!cancelled) setAiError(e.message); })
       .finally(() => { if (!cancelled) setAiLoading(false); });
     return () => { cancelled = true; };
   }, [keyVersion]);
 
-  // Fetch news for significant days (only when AI key + Finnhub key are both available)
+  // Fetch news for significant days (only when AI key + Finnhub key are both available, skip if cached)
   useEffect(() => {
     if (significantDays.length === 0) return;
     if (!hasAiKey(localApiKeys) || !localApiKeys.finnhub) return;
+    const cached = getAlertsCache(stock.ticker);
+    if (cached && cached.length > 0) { setAlerts(cached); return; }
     let cancelled = false;
     setAlertsLoading(true);
     const processDay = async (day) => {
@@ -2832,6 +2848,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
       }
       if (!cancelled) {
         setAlerts(results);
+        setAlertsCache(stock.ticker, results);
         setAlertsLoading(false);
       }
     };
