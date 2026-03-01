@@ -2577,9 +2577,9 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
               const tag = yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
               return <>
                 <HistoryChart title={`${tag} PE Ratio`} series={peSeries} yLabel="PE" color="#4ADE80" formatFn={v => safePE(v).toString()} />
-                <HistoryChart title={`${tag} PS Ratio`} series={psSeries} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
-                <HistoryChart title={`${tag} EBITDA`} series={ebitdaSeries} yLabel="EBITDA" color="#60A5FA" formatFn={v => '$' + fmtBigNum(v)} />
                 <HistoryChart title={`${tag} Market Cap`} series={mktcapSeries} yLabel="Mkt Cap" color="#FB923C" formatFn={v => '$' + fmtBigNum(v)} />
+                <HistoryChart title={`${tag} EBITDA`} series={ebitdaSeries} yLabel="EBITDA" color="#60A5FA" formatFn={v => '$' + fmtBigNum(v)} />
+                <HistoryChart title={`${tag} PS Ratio`} series={psSeries} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
                 <HistoryChart title={`${tag} Free Cash Flow`} series={fcfSeries} yLabel="FCF" color="#22D3EE" formatFn={v => '$' + fmtBigNum(v)} />
                 <PriceAlertChart prices1y={prices1y} significantDays={significantDays} />
               </>;
