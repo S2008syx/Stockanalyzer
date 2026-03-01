@@ -36,6 +36,20 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+    @keyframes slideProgress {
+      0%   { left: -30%; width: 30%; }
+      50%  { left: 40%;  width: 40%; }
+      100% { left: 100%; width: 30%; }
+    }
+    .slide-progress-bar {
+      position: relative; width: 100%; height: 3px; background: rgba(255,255,255,0.06);
+      border-radius: 3px; overflow: hidden; margin: 10px 0 6px;
+    }
+    .slide-progress-bar::after {
+      content: ''; position: absolute; top: 0; height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), #60a5fa, var(--accent));
+      animation: slideProgress 1.8s ease-in-out infinite;
+    }
 
     /* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Layout ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
     .app { min-height: 100vh; display: flex; flex-direction: column; }
@@ -813,7 +827,8 @@ Provide your analysis in this EXACT JSON format (no markdown, no code fences, ju
   "growth": "Return exactly 3 lines, each prefixed with its number. Use **bold** markdown for all analyst/institution names and all percentage/number values. Format:\n1. **[Analyst/Institution 1]** expects **X%**, **[Analyst/Institution 2]** expects **Y%**, **[Analyst/Institution 3]** expects **Z%** — average expected growth rate is **W%**.\n2. [Combined reasoning from all three: catalysts, tailwinds, market trends that drive their growth expectations.]\n3. [Main downside risks or negative factors that could cause actual growth to fall below expectations.]\nUse real, credible analysts or institutions (e.g. Goldman Sachs, Morgan Stanley, JP Morgan, Bank of America, UBS, etc.) who cover this stock. Bold every name and every number/rate."
 }
 The segments array should list 3 to 5 main business segments ordered from largest to smallest revenue contribution. Each item is a short phrase (2-6 words).`;
-  const text = await callAI(prompt, apiKeys);
+  const result = await callAIWithSearch(prompt, apiKeys);
+  const text = typeof result === 'string' ? result : result.text;
   const jsonStr = extractJSON(text);
   if (!jsonStr) throw new Error('AI returned an unexpected response format. Please try again.');
   let data;
@@ -840,7 +855,8 @@ Rules:
 - pros[1] and cons[1]: how AI (artificial intelligence trends, AI adoption, AI competition, AI disruption) specifically impacts this company — as an opportunity (pro) or threat (con).
 - pros[2] and cons[2]: macro-economic factors (US economy, interest rates, inflation, trade policy, tariffs, etc.) and how they specifically impact this company.
 Each point should be a concise sentence (8-15 words).`;
-  const text = await callAI(prompt, apiKeys, 512);
+  const result = await callAIWithSearch(prompt, apiKeys, 512);
+  const text = typeof result === 'string' ? result : result.text;
   const jsonStr = extractJSON(text);
   if (!jsonStr) throw new Error('AI returned an unexpected response format.');
   let data;
@@ -2052,7 +2068,10 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
   if (loading) return (
     <div className="ai-panel">
       <h3>AI Insights</h3>
-      <div className="ai-loading"><Spinner /> Generating AI analysis...</div>
+      <div className="ai-loading">
+        <Spinner /> Searching the web & generating AI analysis...
+        <div className="slide-progress-bar" />
+      </div>
     </div>
   );
   if (error) return (
@@ -2105,7 +2124,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
         </button>
         {prosConsOpen && (
           <div style={{ marginTop: 10, animation: 'fadeUp .3s ease-out both' }}>
-            {prosConsLoading && <div className="ai-loading"><Spinner /> Generating pros & cons...</div>}
+            {prosConsLoading && <div className="ai-loading"><Spinner /> Searching the web & generating pros & cons...<div className="slide-progress-bar" /></div>}
             {prosConsError && <div className="ai-loading" style={{ color: 'var(--danger)' }}>Error: {prosConsError}</div>}
             {prosCons && (() => {
               const cats = ['Fundamentals', 'AI Impact', 'Macro Economy'];
