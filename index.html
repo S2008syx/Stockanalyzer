@@ -2146,6 +2146,22 @@ function DevToolsPanel({ onClose, onDefaultsSaved }) {
     setDevDefaults(defaults);
     setSaved(true);
     if (onDefaultsSaved) onDefaultsSaved();
+    // Persist defaults into the HTML file itself by downloading an updated copy
+    try {
+      const html = document.documentElement.outerHTML;
+      const pattern = /const hardcoded\s*=\s*\{[^}]*\}/;
+      const replacement = `const hardcoded = { fmp: '${(defaults.fmp || '').replace(/'/g, "\\'")}', claude: '${(defaults.claude || '').replace(/'/g, "\\'")}', finnhub: '${(defaults.finnhub || '').replace(/'/g, "\\'")}', openrouter: '${(defaults.openrouter || '').replace(/'/g, "\\'")}' }`;
+      const updated = '<!DOCTYPE html>\n<html>' + html.replace(pattern, replacement) + '</html>';
+      const blob = new Blob([updated], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'index.html';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.warn('Could not generate updated HTML file:', e);
+    }
   }
 
   const keyFields = [
@@ -2198,7 +2214,7 @@ function DevToolsPanel({ onClose, onDefaultsSaved }) {
         <div className="modal-header">
           <h2 style={{ fontSize: 18 }}>Developer Tools - System Defaults</h2>
           <p style={{ color: 'var(--text-dim)', fontSize: 12 }}>
-            Changes here update system-level default API keys for all users.
+            Save will download an updated index.html with keys hardcoded in the file. Replace the old file to persist defaults permanently.
           </p>
         </div>
         <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
@@ -2242,7 +2258,7 @@ function DevToolsPanel({ onClose, onDefaultsSaved }) {
         <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button className="btn btn-outline" onClick={onClose}>Close</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {saved && <span style={{ fontSize: 12, color: 'var(--success)' }}>Defaults saved</span>}
+            {saved && <span style={{ fontSize: 12, color: 'var(--success)' }}>Saved! Replace your index.html with the downloaded file.</span>}
             <button className="btn btn-primary" onClick={handleSave}>Save Defaults</button>
           </div>
         </div>
