@@ -463,6 +463,8 @@ const CHECKLIST_ITEMS = [
   { key: 'ebitda15', label: '15Y EBITDA History', type: 'history', fmt: 'big' },
   { key: 'mktcap15', label: '15Y Market Cap History', type: 'history', fmt: 'big' },
   { key: 'fcf15', label: '15Y Free Cash Flow History', type: 'history', fmt: 'big' },
+  { key: 'ocf15', label: '15Y Operating Cash Flow History', type: 'history', fmt: 'big' },
+  { key: 'netdebt15', label: '15Y Net Debt History', type: 'history', fmt: 'big' },
   { key: 'price', label: 'Current Price (Previous Close)', type: 'single' },
   { key: 'eps', label: 'Current EPS (TTM)', type: 'single' },
   { key: 'shares', label: 'Shares Outstanding', type: 'single', fmt: 'big' },
@@ -1000,24 +1002,24 @@ function findSignificantChanges(changes, threshold = 0.05) {
   return changes.filter(c => Math.abs(c.change) > threshold);
 }
 
-// Calculate 15Y Market Cap / EBITDA ratio
-function calcMktCapToEbitda(evData, incomeData) {
+// Calculate 15Y EV / EBITDA ratio
+function calcEvToEbitda(evData, incomeData) {
   const evByYear = {};
   (evData || []).forEach(e => {
     const y = e.date ? e.date.slice(0, 4) : null;
-    if (y) evByYear[y] = e.marketCapitalization;
+    if (y) evByYear[y] = e.enterpriseValue;
   });
   const result = [];
   (incomeData || []).forEach(i => {
     const y = i.calendarYear || i.fiscalYear || (i.date ? i.date.slice(0, 4) : null);
     if (!y) return;
-    const mktCap = evByYear[y];
+    const evVal = evByYear[y];
     const ebitda = i.ebitda;
     let ratio = null;
-    if (mktCap && ebitda && ebitda > 0) {
-      ratio = Number((mktCap / ebitda).toFixed(2));
+    if (evVal && ebitda && ebitda > 0) {
+      ratio = Number((evVal / ebitda).toFixed(2));
     }
-    result.push({ year: y, mktCap: mktCap || null, ebitda: ebitda || null, ratio });
+    result.push({ year: y, ev: evVal || null, ebitda: ebitda || null, ratio });
   });
   return result.sort((a, b) => a.year.localeCompare(b.year));
 }
@@ -1106,7 +1108,7 @@ function buildChecklist(rawData) {
   // Map checklist keys to their data source error keys
   const errorSourceMap = {
     pe15: 'ratios', ps15: 'ratios',
-    ebitda15: 'income', mktcap15: 'ev', fcf15: 'cashflow', ocf15: 'cashflow',
+    ebitda15: 'income', mktcap15: 'ev', netdebt15: 'ev', fcf15: 'cashflow', ocf15: 'cashflow',
     price: 'profile', eps: 'profile', shares: 'profile',
     geo: 'geo', seg: 'seg', prices1y: 'prices1y', sig5: 'prices1y',
     analystTarget: 'priceTarget', analystRating: 'rating',
@@ -1136,6 +1138,15 @@ function buildChecklist(rawData) {
     year: d.date ? d.date.slice(0, 4) : null, value: d.marketCapitalization
   })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
   status.mktcap15 = buildHistoryStatus(mcYears, yearList);
+
+  const netDebtYears = ev.map(d => {
+    const y = d.date ? d.date.slice(0, 4) : null;
+    const evVal = d.enterpriseValue;
+    const mc = d.marketCapitalization;
+    const nd = (evVal != null && mc != null) ? evVal - mc : null;
+    return { year: y, value: nd };
+  }).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  status.netdebt15 = buildHistoryStatus(netDebtYears, yearList);
 
   const fcfYears = cashflow.map(d => ({
     year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null), value: d.freeCashFlow
@@ -1854,7 +1865,7 @@ function DataChecklistModal({ checklist, onConfirm, onCancel, initialInputs, can
             Fill in missing values below or leave blank to skip.
           </p>
           <p style={{ fontSize: 12, color: 'var(--accent)', marginTop: 4 }}>
-            Note: For EBITDA, Market Cap, FCF, and Shares fields, enter values in billions (e.g. 2.5 = $2.5B)
+            Note: For EBITDA, Market Cap, FCF, OCF, Net Debt, and Shares fields, enter values in billions (e.g. 2.5 = $2.5B)
           </p>
         </div>
         <div className="modal-body">
@@ -2589,9 +2600,9 @@ function MissingDataFooter({ checklist }) {
 // ============================================================
 // SECTION 16: SUPPLEMENT CHARTS SECTION
 // ============================================================
-function SupplementSection({ mktCapEbitda, epsSeries, psSeries, expectedYears }) {
+function SupplementSection({ evEbitda, epsSeries, psSeries, expectedYears }) {
   const [open, setOpen] = useState(false);
-  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (mktCapEbitda || []).length);
+  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (evEbitda || []).length);
   const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
   return (
     <div className="supplement">
@@ -2605,9 +2616,9 @@ function SupplementSection({ mktCapEbitda, epsSeries, psSeries, expectedYears })
             <HistoryChart title={`${tag} EPS`} series={epsSeries || []} yLabel="EPS" color="#F472B6" formatFn={v => '$' + fmtNum(v, 2)} />
             <HistoryChart title={`${tag} PS Ratio`} series={psSeries || []} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
             <HistoryChart
-              title={`${tag} Market Cap / EBITDA`}
-              series={(mktCapEbitda || []).map(d => ({ year: d.year, value: d.ratio }))}
-              yLabel="MktCap/EBITDA"
+              title={`${tag} EV / EBITDA`}
+              series={(evEbitda || []).map(d => ({ year: d.year, value: d.ratio }))}
+              yLabel="EV/EBITDA"
               color="#7c3aed"
               formatFn={v => v != null ? fmtNum(v, 1) + 'x' : '-'}
             />
@@ -2799,8 +2810,8 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     });
   }
 
-  // MktCap/EBITDA ratio
-  const mktCapEbitda = useMemo(() => calcMktCapToEbitda(rawData.ev, rawData.income), [rawData]);
+  // EV/EBITDA ratio
+  const evEbitda = useMemo(() => calcEvToEbitda(rawData.ev, rawData.income), [rawData]);
 
   // PE series - merge user inputs, apply negative PE = 0 rule, flag negatives
   const peSeries = useMemo(() => {
@@ -3002,7 +3013,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
             })()}
           </div>
 
-          <SupplementSection mktCapEbitda={mktCapEbitda} epsSeries={epsSeries} psSeries={psSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementSection evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} expectedYears={checklist._meta?.expectedYears} />
 
           <DistributionSection geo={geo} seg={seg} />
 
