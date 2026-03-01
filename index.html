@@ -1067,6 +1067,17 @@ function buildChecklist(rawData) {
 // SECTION 5: REACT COMPONENTS
 // ============================================================
 
+// Render **bold** markdown as React elements (avoids dangerouslySetInnerHTML)
+function renderMarkdownBold(text) {
+  const parts = text.split(/(\*\*.+?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return React.createElement('strong', { key: i, style: { color: '#E2E8F0' } }, part.slice(2, -2));
+    }
+    return part;
+  });
+}
+
 // --- Spinner ---
 function Spinner({ size }) {
   return <span className={`spinner ${size === 'lg' ? 'spinner-lg' : ''}`} />;
@@ -1911,7 +1922,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
           <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--blue)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Analyst Growth Expectations</h4>
           <div style={{ fontSize: '0.93em', color: 'var(--text-sec)', lineHeight: 1.7, margin: 0 }}>
             {insights.growth.split('\n').filter(l => l.trim()).map((line, i) => (
-              <p key={i} style={{ margin: '0 0 6px 0' }} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g, '<strong style="color:#E2E8F0">$1</strong>') }} />
+              <p key={i} style={{ margin: '0 0 6px 0' }}>{renderMarkdownBold(line)}</p>
             ))}
           </div>
         </div>
