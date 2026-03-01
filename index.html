@@ -2361,7 +2361,7 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
           )}
         </div>
       </main>
-      {/* Developer Tools FAB - bottom right */}
+      {/* Developer Tools FAB - bottom right, delayed fade-in to avoid flash on load */}
       <button
         onClick={() => setShowDevTools(true)}
         title="Developer Tools"
@@ -2371,6 +2371,7 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
           color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center',
           justifyContent: 'center', fontSize: 18, transition: 'all .2s', zIndex: 50,
           boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          animation: 'fadeUp .4s ease-out 0.6s both',
         }}
         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)'; }}
