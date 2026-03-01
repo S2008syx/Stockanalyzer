@@ -622,8 +622,76 @@ async function callClaude(prompt, claudeKey, maxTokens = 1024) {
   return (d.content && d.content[0] && d.content[0].text) ? d.content[0].text.trim() : '';
 }
 
+// AI helper: call Claude with web search (Sonnet model) — returns { text, sources }
+async function callClaudeWithSearch(prompt, claudeKey, maxTokens = 1024) {
+  const r = await fetch(CLAUDE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': sanitizeKey(claudeKey),
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+    }),
+  });
+  if (!r.ok) {
+    const err = await r.text().catch(() => '');
+    throw new Error(`Claude API error ${r.status}: ${err}`);
+  }
+  const d = await r.json();
+  // Handle pause_turn: if the model paused, continue the conversation
+  let content = d.content || [];
+  if (d.stop_reason === 'pause_turn') {
+    const continueR = await fetch(CLAUDE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': sanitizeKey(claudeKey),
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: content },
+        ],
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+      }),
+    });
+    if (continueR.ok) {
+      const d2 = await continueR.json();
+      content = [...content, ...(d2.content || [])];
+    }
+  }
+  // Extract text blocks and sources from citations
+  let text = '';
+  const sources = [];
+  const seenUrls = new Set();
+  for (const block of content) {
+    if (block.type === 'text') {
+      text += block.text;
+      if (block.citations) {
+        for (const c of block.citations) {
+          if (c.url && !seenUrls.has(c.url)) {
+            seenUrls.add(c.url);
+            sources.push({ url: c.url, title: c.title || c.url });
+          }
+        }
+      }
+    }
+  }
+  return { text: text.trim(), sources };
+}
+
 // AI helper: call OpenRouter API (OpenAI-compatible)
-async function callOpenRouter(prompt, openrouterKey, maxTokens = 1024) {
+async function callOpenRouter(prompt, openrouterKey, maxTokens = 1024, useSonnet = false) {
   const r = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers: {
@@ -633,7 +701,7 @@ async function callOpenRouter(prompt, openrouterKey, maxTokens = 1024) {
       'X-OpenRouter-Title': 'Stock Analyzer',
     },
     body: JSON.stringify({
-      model: 'anthropic/claude-haiku-4.5',
+      model: useSonnet ? 'anthropic/claude-sonnet-4.6' : 'anthropic/claude-haiku-4.5',
       max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -652,6 +720,15 @@ async function callAI(prompt, apiKeys, maxTokens = 1024) {
     return callOpenRouter(prompt, apiKeys.openrouter, maxTokens);
   }
   return callClaude(prompt, apiKeys.claude, maxTokens);
+}
+
+// Unified AI call with web search (Sonnet): returns { text, sources }
+async function callAIWithSearch(prompt, apiKeys, maxTokens = 1024) {
+  if (apiKeys.aiProvider === 'openrouter' && apiKeys.openrouter) {
+    const text = await callOpenRouter(prompt, apiKeys.openrouter, maxTokens, true);
+    return { text, sources: [] };
+  }
+  return callClaudeWithSearch(prompt, apiKeys.claude, maxTokens);
 }
 
 // Helper: check if AI is configured
@@ -707,15 +784,22 @@ Rules: The first 2 pros and first 2 cons must be about the company's own fundame
 }
 
 async function fetchAiStockAnswer(question, stockInfo, apiKeys) {
-  const prompt = `You are a stock analysis assistant. You are currently analyzing ${stockInfo.name} (${stockInfo.ticker}), price: $${stockInfo.price || 'N/A'}, PE: ${stockInfo.pe || 'N/A'}, Market Cap: $${fmtBigNum(stockInfo.marketCap)}.
+  const prompt = `You are a friendly stock analysis assistant that explains things in plain, easy-to-understand language — as if you're talking to someone who is NOT a finance expert. Avoid jargon; when you must use a financial term, briefly explain what it means in parentheses.
+
+You are currently analyzing ${stockInfo.name} (${stockInfo.ticker}), price: $${stockInfo.price || 'N/A'}, PE: ${stockInfo.pe || 'N/A'}, Market Cap: $${fmtBigNum(stockInfo.marketCap)}.
 
 User question: "${question}"
 
 First, determine if this question is related to stocks, investing, finance, or this company. If it is NOT related, respond with EXACTLY this text and nothing else:
 Even though I can answer this question, my developer, Sibo Song, only allows me to answer AI-related questions.
 
-If the question IS related to stocks/finance/investing, provide a concise answer in 100 words or fewer. Be specific and data-driven where possible.`;
-  return await callAI(prompt, apiKeys, 256);
+If the question IS related to stocks/finance/investing:
+- Search the web for the latest, most up-to-date information to give an accurate answer.
+- Write in plain, conversational English that anyone can understand.
+- Keep your answer concise (under 150 words) but informative.
+- Use specific numbers and data when available.`;
+  const result = await callAIWithSearch(prompt, apiKeys, 512);
+  return result;
 }
 
 // AI: Summarize news for price alert dates
@@ -1087,7 +1171,7 @@ function ApiKeyModal({ keys, onSave }) {
               <input className="input" value={openrouter} onChange={e => setOpenrouter(e.target.value)} placeholder="sk-or-..." type="password" />
               {openrouter && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Current: {openrouter.slice(0, 10)}...{openrouter.slice(-4)}</span>}
               <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                Get your key at openrouter.ai ÃÂ¢ÃÂÃÂ uses Claude Haiku via OpenRouter
+                Get your key at openrouter.ai ÃÂ¢ÃÂÃÂ Q&A uses Claude Sonnet via OpenRouter
               </span>
             </div>
           )}
@@ -1743,10 +1827,10 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
     setQaMessages(prev => [...prev, { role: 'user', text: q }]);
     setQaLoading(true);
     try {
-      const answer = await fetchAiStockAnswer(q, stockInfo, apiKeys);
-      setQaMessages(prev => [...prev, { role: 'ai', text: answer }]);
+      const result = await fetchAiStockAnswer(q, stockInfo, apiKeys);
+      setQaMessages(prev => [...prev, { role: 'ai', text: result.text, sources: result.sources || [] }]);
     } catch (err) {
-      setQaMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + err.message }]);
+      setQaMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + err.message, sources: [] }]);
     } finally {
       setQaLoading(false);
     }
@@ -1837,11 +1921,14 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
         )}
       </div>
 
-      {/* Q&A Chat Box */}
+      {/* Q&A Chat Box — Powered by Claude Sonnet + Web Search */}
       <div style={{ marginTop: 18, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-        <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-sec)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Ask About This Stock</h4>
+        <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-sec)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+          Ask About This Stock
+          <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-dim)', marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>Powered by Sonnet + Web Search</span>
+        </h4>
         {qaMessages.length > 0 && (
-          <div style={{ maxHeight: 280, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ maxHeight: 340, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {qaMessages.map((m, i) => (
               <div key={i} style={{
                 padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.9em', lineHeight: 1.5,
@@ -1851,11 +1938,23 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
                 ),
               }}>
                 {m.text}
+                {m.sources && m.sources.length > 0 && (
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(74,222,128,0.12)', fontSize: '0.8em' }}>
+                    <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Sources:</span>
+                    {m.sources.map((s, j) => (
+                      <a key={j} href={s.url} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'block', color: 'var(--blue)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}
+                      >
+                        {s.title}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             {qaLoading && (
               <div style={{ alignSelf: 'flex-start', padding: '8px 12px', fontSize: '0.9em', color: 'var(--text-dim)' }}>
-                <Spinner /> Thinking...
+                <Spinner /> Searching the web & thinking...
               </div>
             )}
             <div ref={qaEndRef} />
@@ -1866,12 +1965,12 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
             className="input"
             value={qaInput}
             onChange={e => setQaInput(e.target.value)}
-            placeholder="Ask a question about this stock..."
+            placeholder="Ask anything about this stock (with live web data)..."
             disabled={qaLoading}
             style={{ flex: 1, fontSize: 13 }}
           />
           <button className="btn btn-primary btn-sm" type="submit" disabled={qaLoading || !qaInput.trim()} style={{ whiteSpace: 'nowrap' }}>
-            {qaLoading ? 'Asking...' : 'Ask'}
+            {qaLoading ? 'Searching...' : 'Ask'}
           </button>
         </form>
       </div>
