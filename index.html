@@ -570,20 +570,22 @@ async function fetchFinnhubNews(ticker, dateStr, finnhubKey) {
 // Fetch all stock data in parallel
 async function fetchAllStockData(ticker, keys) {
   const results = {};
+  const errors = {};
   const tasks = [
-    fetchProfile(ticker, keys.fmp).then(d => results.profile = d).catch(() => results.profile = null),
-    fetchIncomeStatements(ticker, keys.fmp).then(d => results.income = d).catch(() => results.income = []),
-    fetchKeyMetrics(ticker, keys.fmp).then(d => results.metrics = d).catch(() => results.metrics = []),
-    fetchEnterpriseValues(ticker, keys.fmp).then(d => results.ev = d).catch(() => results.ev = []),
-    fetchCashFlowStatements(ticker, keys.fmp).then(d => results.cashflow = d).catch(() => results.cashflow = []),
-    fetchHistoricalPrices(ticker, keys.fmp).then(d => results.prices1y = d).catch(() => results.prices1y = []),
-    fetchRatios(ticker, keys.fmp).then(d => results.ratios = d).catch(() => results.ratios = []),
-    fetchGeoRevenue(ticker, keys.fmp).then(d => results.geo = d).catch(() => results.geo = null),
-    fetchSegRevenue(ticker, keys.fmp).then(d => results.seg = d).catch(() => results.seg = null),
-    fetchPriceTargetConsensus(ticker, keys.finnhub).then(d => results.priceTarget = d).catch(() => results.priceTarget = null),
-    fetchRatingConsensus(ticker, keys.finnhub).then(d => results.rating = d).catch(() => results.rating = null),
+    fetchProfile(ticker, keys.fmp).then(d => results.profile = d).catch(e => { results.profile = null; errors.profile = e.message; }),
+    fetchIncomeStatements(ticker, keys.fmp).then(d => results.income = d).catch(e => { results.income = []; errors.income = e.message; }),
+    fetchKeyMetrics(ticker, keys.fmp).then(d => results.metrics = d).catch(e => { results.metrics = []; errors.metrics = e.message; }),
+    fetchEnterpriseValues(ticker, keys.fmp).then(d => results.ev = d).catch(e => { results.ev = []; errors.ev = e.message; }),
+    fetchCashFlowStatements(ticker, keys.fmp).then(d => results.cashflow = d).catch(e => { results.cashflow = []; errors.cashflow = e.message; }),
+    fetchHistoricalPrices(ticker, keys.fmp).then(d => results.prices1y = d).catch(e => { results.prices1y = []; errors.prices1y = e.message; }),
+    fetchRatios(ticker, keys.fmp).then(d => results.ratios = d).catch(e => { results.ratios = []; errors.ratios = e.message; }),
+    fetchGeoRevenue(ticker, keys.fmp).then(d => results.geo = d).catch(e => { results.geo = null; errors.geo = e.message; }),
+    fetchSegRevenue(ticker, keys.fmp).then(d => results.seg = d).catch(e => { results.seg = null; errors.seg = e.message; }),
+    fetchPriceTargetConsensus(ticker, keys.finnhub).then(d => results.priceTarget = d).catch(e => { results.priceTarget = null; errors.priceTarget = e.message; }),
+    fetchRatingConsensus(ticker, keys.finnhub).then(d => results.rating = d).catch(e => { results.rating = null; errors.rating = e.message; }),
   ];
   await Promise.all(tasks);
+  results._errors = errors;
   // Stable API profile lacks eps & sharesOutstanding; derive from other data
   if (results.profile) {
     if (results.profile.eps == null && results.income && results.income[0]) {
@@ -1008,6 +1010,16 @@ function buildChecklist(rawData) {
   const cashflow = rawData.cashflow || [];
   const profile = rawData.profile;
   const prices1y = rawData.prices1y || [];
+  const errs = rawData._errors || {};
+
+  // Map checklist keys to their data source error keys
+  const errorSourceMap = {
+    pe15: 'ratios', ps15: 'ratios',
+    ebitda15: 'income', mktcap15: 'ev', fcf15: 'cashflow',
+    price: 'profile', eps: 'profile', shares: 'profile',
+    geo: 'geo', seg: 'seg', prices1y: 'prices1y', sig5: 'prices1y',
+    analystTarget: 'priceTarget', analystRating: 'rating',
+  };
 
   const { startYear, expectedYears, yearList } = getExpectedYears(rawData);
   status._meta = { startYear, expectedYears, yearList };
@@ -1053,6 +1065,21 @@ function buildChecklist(rawData) {
   const dailyChanges = calcDailyChanges(prices1y);
   const sigDays = findSignificantChanges(dailyChanges);
   status.sig5 = { available: prices1y.length > 0 ? 1 : 0, total: 1, data: sigDays, count: sigDays.length };
+
+  // Attach errorReason to each checklist item that has missing data
+  for (const key of Object.keys(status)) {
+    if (key === '_meta') continue;
+    const s = status[key];
+    if (s.available === 0 || (s.total > 1 && s.available < s.total)) {
+      const errKey = errorSourceMap[key];
+      if (errKey && errs[errKey]) {
+        s.errorReason = 'api_error';
+        s.errorMessage = errs[errKey];
+      } else {
+        s.errorReason = 'no_data';
+      }
+    }
+  }
 
   const priceTarget = rawData.priceTarget;
   status.analystTarget = { available: priceTarget?.targetConsensus ? 1 : 0, total: 1, data: priceTarget?.targetConsensus || null };
@@ -2294,24 +2321,51 @@ function DistributionSection({ geo, seg }) {
 // SECTION 15: MISSING DATA FOOTER
 // ============================================================
 function MissingDataFooter({ checklist }) {
-  const missing = [];
+  const apiErrors = [];
+  const noData = [];
   CHECKLIST_ITEMS.forEach(item => {
     const s = checklist[item.key];
     if (!s) return;
+    const isMissing = item.type === 'history'
+      ? (s.available === 0 || s.available < s.total)
+      : s.available === 0;
+    if (!isMissing) return;
+    let desc;
     if (item.type === 'history') {
-      if (s.available === 0) missing.push(`The ${item.label} is entirely missing.`);
-      else if (s.available < s.total) missing.push(`The ${item.label} is partially missing (${s.available}/${s.total} years).`);
+      desc = s.available === 0
+        ? `The ${item.label} is entirely missing.`
+        : `The ${item.label} is partially missing (${s.available}/${s.total} years).`;
     } else {
-      if (s.available === 0) missing.push(`${item.label} is missing.`);
+      desc = `${item.label} is missing.`;
+    }
+    if (s.errorReason === 'api_error') {
+      apiErrors.push(desc);
+    } else {
+      noData.push(desc);
     }
   });
-  if (missing.length === 0) return null;
+  if (apiErrors.length === 0 && noData.length === 0) return null;
   return (
-    <div className="detail-footer">
-      <h4>Missing Data Summary</h4>
-      <ul>
-        {missing.map((m, i) => <li key={i}>{m}</li>)}
-      </ul>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
+      {apiErrors.length > 0 && (
+        <div className="detail-footer" style={{ borderColor: 'rgba(248,113,113,0.3)' }}>
+          <h4 style={{ color: 'var(--danger)' }}>API Errors — Try Refreshing</h4>
+          <ul>
+            {apiErrors.map((m, i) => <li key={i} style={{ color: 'var(--danger)' }}>{m}</li>)}
+          </ul>
+          <p style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8, paddingLeft: 16 }}>
+            These items failed due to an API error. Refreshing the page or checking your API key may resolve this.
+          </p>
+        </div>
+      )}
+      {noData.length > 0 && (
+        <div className="detail-footer">
+          <h4>Missing Data — Not Available for This Company</h4>
+          <ul>
+            {noData.map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
