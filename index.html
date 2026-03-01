@@ -555,6 +555,10 @@ async function fetchEnterpriseValues(ticker, key) {
   return fmpGet(`/enterprise-values?symbol=${ticker}&limit=${DATA_YEARS}`, key);
 }
 
+async function fetchBalanceSheet(ticker, key) {
+  return fmpGet(`/balance-sheet-statement?symbol=${ticker}&period=annual&limit=${DATA_YEARS}`, key);
+}
+
 async function fetchCashFlowStatements(ticker, key) {
   return fmpGet(`/cash-flow-statement?symbol=${ticker}&period=annual&limit=${DATA_YEARS}`, key);
 }
@@ -663,6 +667,7 @@ async function fetchAllStockData(ticker, keys) {
     fetchIncomeStatements(ticker, keys.fmp).then(d => results.income = d).catch(e => { results.income = []; errors.income = e.message; }),
     fetchKeyMetrics(ticker, keys.fmp).then(d => results.metrics = d).catch(e => { results.metrics = []; errors.metrics = e.message; }),
     fetchEnterpriseValues(ticker, keys.fmp).then(d => results.ev = d).catch(e => { results.ev = []; errors.ev = e.message; }),
+    fetchBalanceSheet(ticker, keys.fmp).then(d => results.balance = d).catch(e => { results.balance = []; errors.balance = e.message; }),
     fetchCashFlowStatements(ticker, keys.fmp).then(d => results.cashflow = d).catch(e => { results.cashflow = []; errors.cashflow = e.message; }),
     fetchHistoricalPrices(ticker, keys.fmp).then(d => results.prices1y = d).catch(e => { results.prices1y = []; errors.prices1y = e.message; }),
     fetchRatios(ticker, keys.fmp).then(d => results.ratios = d).catch(e => { results.ratios = []; errors.ratios = e.message; }),
@@ -2600,9 +2605,9 @@ function MissingDataFooter({ checklist }) {
 // ============================================================
 // SECTION 16: SUPPLEMENT CHARTS SECTION
 // ============================================================
-function SupplementSection({ evEbitda, epsSeries, psSeries, expectedYears }) {
+function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, expectedYears }) {
   const [open, setOpen] = useState(false);
-  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (evEbitda || []).length);
+  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (evEbitda || []).length, (cashSeries || []).length);
   const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
   return (
     <div className="supplement">
@@ -2621,6 +2626,13 @@ function SupplementSection({ evEbitda, epsSeries, psSeries, expectedYears }) {
               yLabel="EV/EBITDA"
               color="#7c3aed"
               formatFn={v => v != null ? fmtNum(v, 1) + 'x' : '-'}
+            />
+            <HistoryChart
+              title={`${tag} Cash & Equivalents`}
+              series={cashSeries || []}
+              yLabel="Cash"
+              color="#22D3EE"
+              formatFn={v => '$' + fmtBigNum(v)}
             />
           </div>
         </div>
@@ -2853,6 +2865,15 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     return mergeHistoryInputs(checklist.ocf15?.data || [], 'ocf15', v => v * 1e9);
   }, [checklist, userInputs]);
 
+  // Cash & Cash Equivalents series (from balance sheet)
+  const cashSeries = useMemo(() => {
+    const balance = rawData.balance || [];
+    return balance.map(d => ({
+      year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null),
+      value: d.cashAndCashEquivalents
+    })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  }, [rawData]);
+
   // Price alert: calculate significant days
   const dailyChanges = useMemo(() => calcDailyChanges(prices1y), [prices1y]);
   const significantDays = useMemo(() => findSignificantChanges(dailyChanges), [dailyChanges]);
@@ -3013,7 +3034,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
             })()}
           </div>
 
-          <SupplementSection evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementSection evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} cashSeries={cashSeries} expectedYears={checklist._meta?.expectedYears} />
 
           <DistributionSection geo={geo} seg={seg} />
 
