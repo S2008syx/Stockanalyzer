@@ -735,6 +735,28 @@ function hasAiKey(apiKeys) {
   return !!apiKeys.claude;
 }
 
+// Extract the first balanced JSON object from text using bracket depth counting
+function extractJSON(text) {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 // AI: Generate insights
 async function fetchAiInsights(stockInfo, apiKeys) {
   const prompt = `Analyze the stock ${stockInfo.name} (${stockInfo.ticker}).
@@ -752,13 +774,16 @@ Provide your analysis in this EXACT JSON format (no markdown, no code fences, ju
 }
 The segments array should list 3 to 5 main business segments ordered from largest to smallest revenue contribution. Each item is a short phrase (2-6 words).`;
   const text = await callAI(prompt, apiKeys);
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('AI returned an unexpected response format. Please try again.');
-  try {
-    return JSON.parse(jsonMatch[0]);
-  } catch {
+  const jsonStr = extractJSON(text);
+  if (!jsonStr) throw new Error('AI returned an unexpected response format. Please try again.');
+  let data;
+  try { data = JSON.parse(jsonStr); } catch {
     throw new Error('AI returned malformed data. Please try again.');
   }
+  if (typeof data.oneliner !== 'string' || !Array.isArray(data.segments) || typeof data.growth !== 'string') {
+    throw new Error('AI response missing required fields (oneliner, segments, growth). Please try again.');
+  }
+  return data;
 }
 
 async function fetchAiProsCons(stockInfo, apiKeys) {
@@ -772,13 +797,16 @@ Provide EXACTLY this JSON (no markdown, no code fences):
 }
 Rules: The first 2 pros and first 2 cons must be about the company's own fundamentals (revenue, margins, competitive position, management, valuation, etc.). The 3rd pro and 3rd con must be about macro-economic factors (US economy, interest rates, inflation, trade policy, etc.) and how they specifically impact this company. Each point should be a concise sentence (8-15 words).`;
   const text = await callAI(prompt, apiKeys, 512);
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('AI returned an unexpected response format.');
-  try {
-    return JSON.parse(jsonMatch[0]);
-  } catch {
+  const jsonStr = extractJSON(text);
+  if (!jsonStr) throw new Error('AI returned an unexpected response format.');
+  let data;
+  try { data = JSON.parse(jsonStr); } catch {
     throw new Error('AI returned malformed data.');
   }
+  if (!Array.isArray(data.pros) || !Array.isArray(data.cons) || data.pros.length === 0 || data.cons.length === 0) {
+    throw new Error('AI response missing required pros/cons arrays.');
+  }
+  return data;
 }
 
 async function fetchAiStockAnswer(question, stockInfo, apiKeys) {
