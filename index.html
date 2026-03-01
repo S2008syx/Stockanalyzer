@@ -1200,24 +1200,33 @@ function SmartSearch({ apiKey, onSelect }) {
   const [searchError, setSearchError] = useState(false);
   const timerRef = useRef(null);
   const wrapRef = useRef(null);
+  const abortRef = useRef(null);
 
   useEffect(() => {
     function handleClick(e) {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setShowResults(false);
     }
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, []);
 
   const doSearch = useCallback(async (q) => {
     if (!q || q.length < 1) { setResults([]); setSearchError(false); return; }
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       const r = await searchTickers(q, apiKey);
+      if (controller.signal.aborted) return;
       setResults(r || []);
       setShowResults(true);
       setSearchError(false);
     } catch {
+      if (controller.signal.aborted) return;
       setResults([]);
       setSearchError(true);
     }
@@ -2496,6 +2505,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
   // Fetch AI insights after mount or after key is set
   useEffect(() => {
     if (!hasAiKey(localApiKeys)) return;
+    let cancelled = false;
     const price = overrides.price ?? metricsData.price;
     const eps = overrides.eps ?? metricsData.eps;
     setAiLoading(true);
@@ -2509,19 +2519,22 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
       ebitda: metricsData.ebitda,
       fcf: metricsData.fcf,
     }, localApiKeys)
-      .then(d => { setAiInsights(d); setAiError(null); })
-      .catch(e => setAiError(e.message))
-      .finally(() => setAiLoading(false));
+      .then(d => { if (!cancelled) { setAiInsights(d); setAiError(null); } })
+      .catch(e => { if (!cancelled) setAiError(e.message); })
+      .finally(() => { if (!cancelled) setAiLoading(false); });
+    return () => { cancelled = true; };
   }, [keyVersion]);
 
   // Fetch news for significant days (only when AI key + Finnhub key are both available)
   useEffect(() => {
     if (significantDays.length === 0) return;
     if (!hasAiKey(localApiKeys) || !localApiKeys.finnhub) return;
+    let cancelled = false;
     setAlertsLoading(true);
     const fetchNews = async () => {
       const results = [];
       for (const day of significantDays) {
+        if (cancelled) return;
         let news = [];
         try {
           news = await fetchFinnhubNews(stock.ticker, day.date, localApiKeys.finnhub);
@@ -2536,10 +2549,13 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
         }
         results.push({ ...day, newsSummary });
       }
-      setAlerts(results);
-      setAlertsLoading(false);
+      if (!cancelled) {
+        setAlerts(results);
+        setAlertsLoading(false);
+      }
     };
     fetchNews();
+    return () => { cancelled = true; };
   }, [significantDays, keyVersion]);
 
   // Distribution data: prefer API, fall back to user inputs from checklist
