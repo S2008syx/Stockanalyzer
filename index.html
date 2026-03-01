@@ -461,8 +461,6 @@ function getOverrides(ticker) { return getStore('sa_ov_' + ticker, {}); }
 function setOverrides(ticker, o) { setStore('sa_ov_' + ticker, o); }
 function getUserInputs(ticker) { return getStore('sa_inputs_' + ticker, {}); }
 function saveUserInputs(ticker, inputs) { setStore('sa_inputs_' + ticker, inputs); }
-function getStockCache(ticker) { return getStore('sa_cache_' + ticker, null); }
-function setStockCache(ticker, d) { setStore('sa_cache_' + ticker, d); }
 
 // ============================================================
 // SECTION 3: API FUNCTIONS
