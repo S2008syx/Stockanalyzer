@@ -448,13 +448,8 @@ function getStore(key, fallback) {
   catch { return fallback; }
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-function getDevDefaults() {
-  const hardcoded = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6hneg9r01qr5k4clmegd6hneg9r01qr5k4clmf0', openrouter: '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' };
-  return getStore('sa_dev_defaults', hardcoded);
-}
-function setDevDefaults(d) { setStore('sa_dev_defaults', d); }
 function getApiKeys() {
-  const defaults = getDevDefaults();
+  const defaults = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6hneg9r01qr5k4clmegd6hneg9r01qr5k4clmf0', openrouter: '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' };
   const base = { fmp: defaults.fmp, claude: defaults.claude, finnhub: defaults.finnhub, openrouter: defaults.openrouter, aiProvider: defaults.openrouter ? 'openrouter' : (defaults.claude ? 'claude' : 'openrouter') };
   const saved = getStore('sa_api_keys', null);
   return saved ? { ...base, ...saved } : base;
@@ -676,8 +671,9 @@ FCF: $${fmtBigNum(stockInfo.fcf)}
 
 Provide your analysis in this EXACT JSON format (no markdown, no code fences, just raw JSON):
 {
-  "oneliner": "One sentence that captures what this company IS at its core ÃÂ¢ÃÂÃÂ highlight the 1-2 most important things it does. E.g. Apple: 'A company selling phones and a software derivative ecosystem.' Amazon: 'Cloud infrastructure and online retail.' Tesla: 'Electric cars and autonomous driving.' Be specific and concise.",
-  "segments": ["Largest revenue/business segment", "Second largest", "Third largest", "Fourth if applicable", "Fifth if applicable"]
+  "oneliner": "One sentence that captures what this company IS at its core — highlight the 1-2 most important things it does. Be specific and concise.",
+  "segments": ["Largest revenue/business segment", "Second largest", "Third largest", "Fourth if applicable", "Fifth if applicable"],
+  "growth": "One concise paragraph (2-4 sentences) summarizing what Wall Street analysts expect for this company's growth — include consensus revenue/earnings growth rates, key catalysts or headwinds, and overall analyst sentiment (bullish/neutral/bearish). Use specific numbers where possible."
 }
 The segments array should list 3 to 5 main business segments ordered from largest to smallest revenue contribution. Each item is a short phrase (2-6 words).`;
   const text = await callAI(prompt, apiKeys);
@@ -688,6 +684,38 @@ The segments array should list 3 to 5 main business segments ordered from larges
   } catch {
     throw new Error('AI returned malformed data. Please try again.');
   }
+}
+
+async function fetchAiProsCons(stockInfo, apiKeys) {
+  const prompt = `Analyze the stock ${stockInfo.name} (${stockInfo.ticker}).
+Current Price: $${stockInfo.price || 'N/A'}, PE: ${stockInfo.pe || 'N/A'}, Market Cap: $${fmtBigNum(stockInfo.marketCap)}
+
+Provide EXACTLY this JSON (no markdown, no code fences):
+{
+  "pros": ["Investment pro point 1", "Pro point 2", "Pro point 3"],
+  "cons": ["Investment con/risk point 1", "Con point 2", "Con point 3"]
+}
+Each point should be a concise sentence (8-15 words). Focus on investment-relevant factors.`;
+  const text = await callAI(prompt, apiKeys, 512);
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('AI returned an unexpected response format.');
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error('AI returned malformed data.');
+  }
+}
+
+async function fetchAiStockAnswer(question, stockInfo, apiKeys) {
+  const prompt = `You are a stock analysis assistant. You are currently analyzing ${stockInfo.name} (${stockInfo.ticker}), price: $${stockInfo.price || 'N/A'}, PE: ${stockInfo.pe || 'N/A'}, Market Cap: $${fmtBigNum(stockInfo.marketCap)}.
+
+User question: "${question}"
+
+First, determine if this question is related to stocks, investing, finance, or this company. If it is NOT related, respond with EXACTLY this text and nothing else:
+Even though I can answer this question, my developer, Sibo Song, only allows me to answer AI-related questions.
+
+If the question IS related to stocks/finance/investing, provide a concise answer in 100 words or fewer. Be specific and data-driven where possible.`;
+  return await callAI(prompt, apiKeys, 256);
 }
 
 // AI: Summarize news for price alert dates
@@ -1680,7 +1708,50 @@ function AiKeyPrompt({ apiKeys, onKeySubmit }) {
   );
 }
 
-function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeySubmit }) {
+function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeySubmit, stockInfo }) {
+  const [prosConsOpen, setProsConsOpen] = useState(false);
+  const [prosCons, setProsCons] = useState(null);
+  const [prosConsLoading, setProsConsLoading] = useState(false);
+  const [prosConsError, setProsConsError] = useState(null);
+  const [qaMessages, setQaMessages] = useState([]);
+  const [qaInput, setQaInput] = useState('');
+  const [qaLoading, setQaLoading] = useState(false);
+  const qaEndRef = useRef(null);
+
+  function handleToggleProsCons() {
+    const next = !prosConsOpen;
+    setProsConsOpen(next);
+    if (next && !prosCons && !prosConsLoading && stockInfo) {
+      setProsConsLoading(true);
+      setProsConsError(null);
+      fetchAiProsCons(stockInfo, apiKeys)
+        .then(d => { setProsCons(d); setProsConsError(null); })
+        .catch(e => setProsConsError(e.message))
+        .finally(() => setProsConsLoading(false));
+    }
+  }
+
+  async function handleQaSubmit(e) {
+    e.preventDefault();
+    const q = qaInput.trim();
+    if (!q || qaLoading) return;
+    setQaInput('');
+    setQaMessages(prev => [...prev, { role: 'user', text: q }]);
+    setQaLoading(true);
+    try {
+      const answer = await fetchAiStockAnswer(q, stockInfo, apiKeys);
+      setQaMessages(prev => [...prev, { role: 'ai', text: answer }]);
+    } catch (err) {
+      setQaMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + err.message }]);
+    } finally {
+      setQaLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (qaEndRef.current) qaEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [qaMessages, qaLoading]);
+
   if (!aiKeyValid) {
     return <AiKeyPrompt apiKeys={apiKeys} onKeySubmit={onKeySubmit} />;
   }
@@ -1700,6 +1771,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
   return (
     <div className="ai-panel">
       <h3>AI Insights</h3>
+      {/* Company intro */}
       <p className="ai-intro">{insights.oneliner || ''}</p>
       <div className="ai-bullets">
         {(insights.segments || []).map((seg, i) => (
@@ -1708,6 +1780,86 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
             <span>{seg}</span>
           </div>
         ))}
+      </div>
+
+      {/* Analyst Growth Expectations */}
+      {insights.growth && (
+        <div style={{ marginTop: 18, padding: '14px 16px', background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: 'var(--radius-sm)' }}>
+          <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--blue)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Analyst Growth Expectations</h4>
+          <p style={{ fontSize: '0.93em', color: 'var(--text-sec)', lineHeight: 1.6, margin: 0 }}>{insights.growth}</p>
+        </div>
+      )}
+
+      {/* Pros & Cons - folded by default */}
+      <div style={{ marginTop: 18 }}>
+        <button
+          onClick={handleToggleProsCons}
+          style={{
+            background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+            padding: '8px 16px', cursor: 'pointer', color: 'var(--text-sec)', fontSize: 13,
+            fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+            transition: 'all .2s',
+          }}
+        >
+          <span style={{ transform: prosConsOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform .2s', fontSize: 11 }}>{'\u25B6'}</span>
+          Pros & Cons Analysis
+          {!prosCons && !prosConsLoading && <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 400, marginLeft: 'auto' }}>Click to generate</span>}
+        </button>
+        {prosConsOpen && (
+          <div style={{ marginTop: 10, animation: 'fadeUp .3s ease-out both' }}>
+            {prosConsLoading && <div className="ai-loading"><Spinner /> Generating pros & cons...</div>}
+            {prosConsError && <div className="ai-loading" style={{ color: 'var(--danger)' }}>Error: {prosConsError}</div>}
+            {prosCons && (
+              <div className="ai-bullets">
+                {(prosCons.pros || []).map((p, i) => (
+                  <div key={'pro' + i} className="ai-bullet ai-pro">{'\u2705'} {p}</div>
+                ))}
+                {(prosCons.cons || []).map((c, i) => (
+                  <div key={'con' + i} className="ai-bullet ai-con">{'\u274C'} {c}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Q&A Chat Box */}
+      <div style={{ marginTop: 18, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-sec)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Ask About This Stock</h4>
+        {qaMessages.length > 0 && (
+          <div style={{ maxHeight: 280, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {qaMessages.map((m, i) => (
+              <div key={i} style={{
+                padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.9em', lineHeight: 1.5,
+                ...(m.role === 'user'
+                  ? { background: 'rgba(96,165,250,0.1)', color: 'var(--blue)', alignSelf: 'flex-end', maxWidth: '85%', textAlign: 'right' }
+                  : { background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.12)', color: 'var(--text)', alignSelf: 'flex-start', maxWidth: '85%' }
+                ),
+              }}>
+                {m.text}
+              </div>
+            ))}
+            {qaLoading && (
+              <div style={{ alignSelf: 'flex-start', padding: '8px 12px', fontSize: '0.9em', color: 'var(--text-dim)' }}>
+                <Spinner /> Thinking...
+              </div>
+            )}
+            <div ref={qaEndRef} />
+          </div>
+        )}
+        <form onSubmit={handleQaSubmit} style={{ display: 'flex', gap: 8 }}>
+          <input
+            className="input"
+            value={qaInput}
+            onChange={e => setQaInput(e.target.value)}
+            placeholder="Ask a question about this stock..."
+            disabled={qaLoading}
+            style={{ flex: 1, fontSize: 13 }}
+          />
+          <button className="btn btn-primary btn-sm" type="submit" disabled={qaLoading || !qaInput.trim()} style={{ whiteSpace: 'nowrap' }}>
+            {qaLoading ? 'Asking...' : 'Ask'}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -2034,281 +2186,9 @@ function SupplementSection({ mktCapEbitda }) {
 }
 
 // ============================================================
-// SECTION 16B: DEVELOPER TOOLS PANEL
-// ============================================================
-const DEV_PIN = '080523';
-const GH_REPO_OWNER = 'S2008syx';
-const GH_REPO_NAME = 'Stockanalyzer';
-const GH_FILE_PATH = 'index.html';
-
-async function commitDefaultsToGitHub(ghToken, defaults) {
-  const apiBase = `https://api.github.com/repos/${GH_REPO_OWNER}/${GH_REPO_NAME}/contents/${GH_FILE_PATH}`;
-  const headers = { 'Authorization': `token ${sanitizeKey(ghToken)}`, 'Accept': 'application/vnd.github.v3+json' };
-  // 1. Get current file (need sha)
-  const getResp = await fetch(apiBase, { headers });
-  if (!getResp.ok) throw new Error(`GitHub API error: ${getResp.status} ${await getResp.text()}`);
-  const fileData = await getResp.json();
-  const content = atob(fileData.content.replace(/\n/g, ''));
-  // 2. Replace the hardcoded defaults line
-  const pattern = /const hardcoded\s*=\s*\{[^}]*\}/;
-  const replacement = `const hardcoded = { fmp: '${(defaults.fmp || '').replace(/'/g, "\\'")}', claude: '${(defaults.claude || '').replace(/'/g, "\\'")}', finnhub: '${(defaults.finnhub || '').replace(/'/g, "\\'")}', openrouter: '${(defaults.openrouter || '').replace(/'/g, "\\'")}' }`;
-  if (!pattern.test(content)) throw new Error('Could not find hardcoded defaults in source file');
-  const updated = content.replace(pattern, replacement);
-  // 3. Commit
-  const putResp = await fetch(apiBase, {
-    method: 'PUT',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: 'Update default API keys via Developer Tools', content: btoa(unescape(encodeURIComponent(updated))), sha: fileData.sha }),
-  });
-  if (!putResp.ok) throw new Error(`GitHub commit failed: ${putResp.status} ${await putResp.text()}`);
-  return true;
-}
-
-async function testFmpKey(key) {
-  if (!key) return { valid: false, msg: 'Key is empty' };
-  try {
-    const r = await fetch(`${FMP_STABLE}/profile?symbol=AAPL&apikey=${key}`);
-    if (!r.ok) return { valid: false, msg: `HTTP ${r.status}` };
-    const d = await r.json();
-    if (Array.isArray(d) && d.length > 0 && d[0].symbol) return { valid: true, msg: 'Valid' };
-    return { valid: false, msg: 'Invalid key or no data returned' };
-  } catch (e) { return { valid: false, msg: e.message }; }
-}
-
-async function testClaudeKey(key) {
-  if (!key) return { valid: false, msg: 'Key is empty' };
-  try {
-    const r = await fetch(CLAUDE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': sanitizeKey(key), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 5, messages: [{ role: 'user', content: 'Say ok' }] }),
-    });
-    if (!r.ok) { const err = await r.text().catch(() => ''); return { valid: false, msg: `HTTP ${r.status}` }; }
-    return { valid: true, msg: 'Valid' };
-  } catch (e) { return { valid: false, msg: e.message }; }
-}
-
-async function testOpenRouterKey(key) {
-  if (!key) return { valid: false, msg: 'Key is empty' };
-  try {
-    const r = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sanitizeKey(key)}`, 'HTTP-Referer': window.location.origin },
-      body: JSON.stringify({ model: 'anthropic/claude-haiku-4.5', max_tokens: 5, messages: [{ role: 'user', content: 'Say ok' }] }),
-    });
-    if (!r.ok) { const err = await r.text().catch(() => ''); return { valid: false, msg: `HTTP ${r.status}` }; }
-    return { valid: true, msg: 'Valid' };
-  } catch (e) { return { valid: false, msg: e.message }; }
-}
-
-async function testFinnhubKey(key) {
-  if (!key) return { valid: false, msg: 'Key is empty' };
-  try {
-    const r = await fetch(`${FINNHUB}/quote?symbol=AAPL&token=${key}`);
-    if (!r.ok) return { valid: false, msg: `HTTP ${r.status}` };
-    const d = await r.json();
-    if (d && d.c != null) return { valid: true, msg: 'Valid' };
-    return { valid: false, msg: 'Invalid key' };
-  } catch (e) { return { valid: false, msg: e.message }; }
-}
-
-function DevToolsPanel({ onClose, onDefaultsSaved }) {
-  const [pin, setPin] = useState('');
-  const [authenticated, setAuthenticated] = useState(false);
-  const [pinError, setPinError] = useState(false);
-  const [defaults, setDefaults] = useState(getDevDefaults);
-  const [status, setStatus] = useState({ fmp: null, claude: null, openrouter: null, finnhub: null });
-  const [testing, setTesting] = useState({ fmp: false, claude: false, openrouter: false, finnhub: false });
-  const [ghToken, setGhToken] = useState(() => getStore('sa_gh_token', ''));
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState(null);
-
-  function handlePinSubmit() {
-    if (pin === DEV_PIN) {
-      setAuthenticated(true);
-      setPinError(false);
-    } else {
-      setPinError(true);
-    }
-  }
-
-  function handleKeyChange(field, value) {
-    setDefaults(prev => ({ ...prev, [field]: value }));
-    setStatus(prev => ({ ...prev, [field]: null }));
-    setSaved(false);
-  }
-
-  async function handleTest(field) {
-    setTesting(prev => ({ ...prev, [field]: true }));
-    let result;
-    switch (field) {
-      case 'fmp': result = await testFmpKey(defaults.fmp); break;
-      case 'claude': result = await testClaudeKey(defaults.claude); break;
-      case 'openrouter': result = await testOpenRouterKey(defaults.openrouter); break;
-      case 'finnhub': result = await testFinnhubKey(defaults.finnhub); break;
-    }
-    setStatus(prev => ({ ...prev, [field]: result }));
-    setTesting(prev => ({ ...prev, [field]: false }));
-  }
-
-  async function handleAutoTest(field, value) {
-    if (!value) { setStatus(prev => ({ ...prev, [field]: { valid: false, msg: 'Key is empty' } })); return; }
-    setTesting(prev => ({ ...prev, [field]: true }));
-    let result;
-    switch (field) {
-      case 'fmp': result = await testFmpKey(value); break;
-      case 'claude': result = await testClaudeKey(value); break;
-      case 'openrouter': result = await testOpenRouterKey(value); break;
-      case 'finnhub': result = await testFinnhubKey(value); break;
-    }
-    setStatus(prev => ({ ...prev, [field]: result }));
-    setTesting(prev => ({ ...prev, [field]: false }));
-  }
-
-  async function handleSave() {
-    if (!ghToken) { setSaveError('GitHub Token is required to save globally.'); return; }
-    setSaving(true);
-    setSaved(false);
-    setSaveError(null);
-    try {
-      await commitDefaultsToGitHub(ghToken, defaults);
-      setStore('sa_gh_token', ghToken);
-      setDevDefaults(defaults);
-      setSaved(true);
-      if (onDefaultsSaved) onDefaultsSaved();
-    } catch (e) {
-      setSaveError(e.message || 'Failed to commit to GitHub');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const keyFields = [
-    { key: 'fmp', label: 'Financial Modeling Prep (FMP)', placeholder: 'FMP API key' },
-    { key: 'claude', label: 'Anthropic Claude (Direct)', placeholder: 'sk-ant-...' },
-    { key: 'openrouter', label: 'OpenRouter', placeholder: 'sk-or-...' },
-    { key: 'finnhub', label: 'Finnhub', placeholder: 'Finnhub API key' },
-  ];
-
-  // PIN screen
-  if (!authenticated) {
-    return (
-      <div className="modal-overlay" style={{ zIndex: 9999 }}>
-        <div className="modal modal-sm" style={{ maxWidth: 360 }}>
-          <div className="modal-header">
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 18 }}>Developer Tools</span>
-            </h2>
-            <p style={{ color: 'var(--text-dim)', fontSize: 12 }}>Enter PIN to access developer settings</p>
-          </div>
-          <div className="modal-body">
-            <div className="input-group">
-              <label className="input-label">PIN Code</label>
-              <input
-                className="input"
-                type="password"
-                value={pin}
-                onChange={e => { setPin(e.target.value); setPinError(false); }}
-                onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
-                placeholder="Enter PIN"
-                style={pinError ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 3px rgba(248,113,113,0.15)' } : {}}
-                autoFocus
-              />
-              {pinError && <span style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>Incorrect PIN. Please try again.</span>}
-            </div>
-          </div>
-          <div className="modal-footer" style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" onClick={handlePinSubmit}>Unlock</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Authenticated: key management
-  return (
-    <div className="modal-overlay" style={{ zIndex: 9999 }}>
-      <div className="modal" style={{ maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-        <div className="modal-header">
-          <h2 style={{ fontSize: 18 }}>Developer Tools - System Defaults</h2>
-          <p style={{ color: 'var(--text-dim)', fontSize: 12 }}>
-            Save will commit updated defaults directly to GitHub, making changes global for all users.
-          </p>
-        </div>
-        <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
-          <div className="input-group" style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
-            <label className="input-label" style={{ fontWeight: 700, color: 'var(--accent)' }}>GitHub Personal Access Token</label>
-            <input
-              className="input"
-              value={ghToken}
-              onChange={e => { setGhToken(e.target.value); setSaveError(null); }}
-              placeholder="ghp_xxxxxxxxxxxx"
-              type="password"
-              style={{ borderColor: ghToken ? 'var(--success)' : 'var(--border)', transition: 'border-color .2s' }}
-            />
-            <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
-              Required for saving. Needs repo write access to {GH_REPO_OWNER}/{GH_REPO_NAME}.
-            </span>
-          </div>
-          {keyFields.map(({ key, label, placeholder }) => {
-            const s = status[key];
-            const isTesting = testing[key];
-            const borderColor = s ? (s.valid ? 'var(--success)' : 'var(--danger)') : 'var(--border)';
-            return (
-              <div key={key} className="input-group" style={{ marginBottom: 16 }}>
-                <label className="input-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>{label}</span>
-                  {s && (
-                    <span style={{ fontSize: 11, fontWeight: 600, color: s.valid ? 'var(--success)' : 'var(--danger)', textTransform: 'none', letterSpacing: 0 }}>
-                      {s.valid ? 'Valid' : s.msg}
-                    </span>
-                  )}
-                </label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    className="input"
-                    value={defaults[key]}
-                    onChange={e => handleKeyChange(key, e.target.value)}
-                    onBlur={e => { if (e.target.value) handleAutoTest(key, e.target.value); }}
-                    placeholder={placeholder}
-                    type="password"
-                    style={{ flex: 1, borderColor, transition: 'border-color .2s' }}
-                  />
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => handleTest(key)}
-                    disabled={isTesting || !defaults[key]}
-                    style={{ whiteSpace: 'nowrap', minWidth: 60 }}
-                  >
-                    {isTesting ? 'Testing...' : 'Test'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button className="btn btn-outline" onClick={onClose}>Close</button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {saveError && <span style={{ fontSize: 12, color: 'var(--danger)', maxWidth: 280 }}>{saveError}</span>}
-            {saved && <span style={{ fontSize: 12, color: 'var(--success)' }}>Committed to GitHub! Changes will be live after deploy.</span>}
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-              {saving ? 'Committing...' : 'Save to GitHub'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
 // SECTION 17: DASHBOARD PAGE
 // ============================================================
-function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode, onDevDefaultsSaved }) {
-  const [showDevTools, setShowDevTools] = useState(false);
+function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode }) {
   function handleSelect(stock) {
     if (watchlist.some(w => w.ticker === stock.ticker)) return;
     const newList = [...watchlist, stock];
@@ -2361,24 +2241,6 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
           )}
         </div>
       </main>
-      {/* Developer Tools FAB - bottom right, delayed fade-in to avoid flash on load */}
-      <button
-        onClick={() => setShowDevTools(true)}
-        title="Developer Tools"
-        style={{
-          position: 'fixed', bottom: 24, right: 24, width: 44, height: 44,
-          borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--card)',
-          color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', fontSize: 18, transition: 'all .2s', zIndex: 50,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-          animation: 'fadeUp .4s ease-out 0.6s both',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)'; }}
-      >
-        &#9881;
-      </button>
-      {showDevTools && <DevToolsPanel onClose={() => setShowDevTools(false)} onDefaultsSaved={onDevDefaultsSaved} />}
     </div>
   );
 }
@@ -2607,6 +2469,13 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
             aiKeyValid={hasAiKey(localApiKeys)}
             apiKeys={localApiKeys}
             onKeySubmit={handleAiKeySubmit}
+            stockInfo={{
+              name: stock.name,
+              ticker: stock.ticker,
+              price: overrides.price ?? metricsData.price,
+              pe: calcPE(overrides.price ?? metricsData.price, overrides.eps ?? metricsData.eps),
+              marketCap: calcMarketCap(overrides.price ?? metricsData.price, metricsData.shares),
+            }}
           />
 
           <div className="charts-grid">
@@ -2671,12 +2540,6 @@ function App() {
   function handleUpdateApiKeys(keys) {
     setApiKeys(keys);       // persist to localStorage
     setApiKeysState(keys);  // sync to App state so all pages see it
-  }
-
-  function handleDevDefaultsSaved() {
-    // Re-read merged keys (new dev defaults + user overrides) and sync state
-    const refreshed = getApiKeys();
-    setApiKeysState(refreshed);
   }
 
   function handleSetWatchlist(list) {
@@ -2764,7 +2627,6 @@ function App() {
           onOpenKeys={() => setShowKeyModal(true)}
           proMode={proMode}
           setProMode={setProMode}
-          onDevDefaultsSaved={handleDevDefaultsSaved}
         />
       )}
       {page === 'detail' && selectedStock && rawData && checklist && (
