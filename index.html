@@ -2201,8 +2201,10 @@ function HistoryChart({ title, series, yLabel, color, formatFn }) {
       backgroundColor: (color || CHART_COLORS[0]) + '20',
       fill: true,
       tension: 0.3,
-      pointRadius: 3,
-      pointHoverRadius: 5,
+      pointRadius: series.map(s => s.neg ? 5 : 3),
+      pointHoverRadius: series.map(s => s.neg ? 7 : 5),
+      pointBackgroundColor: series.map(s => s.neg ? '#F87171' : (color || CHART_COLORS[0])),
+      pointBorderColor: series.map(s => s.neg ? '#F87171' : (color || CHART_COLORS[0])),
     }],
   };
   const options = {
@@ -2210,7 +2212,11 @@ function HistoryChart({ title, series, yLabel, color, formatFn }) {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: ctx => formatFn ? formatFn(ctx.raw) : fmtNum(ctx.raw),
+          label: ctx => {
+            const base = formatFn ? formatFn(ctx.raw) : fmtNum(ctx.raw);
+            const s = series[ctx.dataIndex];
+            return s && s.neg ? base + '  (Negative PE)' : base;
+          },
         },
       },
     },
@@ -2676,10 +2682,14 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
   // MktCap/EBITDA ratio
   const mktCapEbitda = useMemo(() => calcMktCapToEbitda(rawData.ev, rawData.income), [rawData]);
 
-  // PE series - merge user inputs, apply negative PE = 0 rule
+  // PE series - merge user inputs, apply negative PE = 0 rule, flag negatives
   const peSeries = useMemo(() => {
-    const base = (checklist.pe15?.data || []).map(d => ({ year: d.year, value: safePE(d.value) }));
-    return mergeHistoryInputs(base, 'pe15', v => safePE(v));
+    const base = (checklist.pe15?.data || []).map(d => ({ year: d.year, value: safePE(d.value), neg: d.value != null && !isNaN(d.value) && d.value < 0 }));
+    const merged = mergeHistoryInputs(base, 'pe15', v => safePE(v));
+    // Preserve neg flag through merge
+    const baseMap = {};
+    base.forEach(b => { baseMap[b.year] = b.neg; });
+    return merged.map(d => ({ ...d, neg: d.neg != null ? d.neg : (baseMap[d.year] || false) }));
   }, [checklist, userInputs]);
 
   // PS series
