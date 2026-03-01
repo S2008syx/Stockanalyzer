@@ -1120,6 +1120,24 @@ function LoadingOverlay({ text }) {
   );
 }
 
+// --- Confirm Modal (replaces window.confirm) ---
+function ConfirmModal({ title, message, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>{title || 'Confirm'}</h2>
+          {message && <p>{message}</p>}
+        </div>
+        <div className="modal-footer" style={{ paddingTop: 16 }}>
+          <button className="btn btn-outline" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-danger" onClick={onConfirm}>Confirm</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Chart Wrapper (Chart.js) ---
 // Chart.js global dark theme
 Chart.defaults.color = '#94A3B8';
@@ -2402,6 +2420,7 @@ function SupplementSection({ mktCapEbitda }) {
 // SECTION 17: DASHBOARD PAGE
 // ============================================================
 function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode }) {
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   function handleSelect(stock) {
     if (watchlist.some(w => w.ticker === stock.ticker)) return;
     const newList = [...watchlist, stock];
@@ -2414,11 +2433,19 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
   }
   return (
     <div className="app">
+      {showClearConfirm && (
+        <ConfirmModal
+          title="Clear All Storage"
+          message="This will remove your watchlist, saved overrides, and all cached data. This action cannot be undone."
+          onConfirm={() => { localStorage.clear(); location.reload(); }}
+          onCancel={() => setShowClearConfirm(false)}
+        />
+      )}
       <header className="header">
         <div className="container header-inner">
           <span className="header-title">Stock Analyzer</span>
           <div className="header-actions">
-            <button className="btn btn-outline btn-sm" onClick={() => { if(confirm('Clear all local storage? This will remove your watchlist, saved overrides, and all cached data.')) { localStorage.clear(); location.reload(); } }} style={{ color: '#e74c3c', borderColor: '#e74c3c' }}>Clear Storage</button>
+            <button className="btn btn-outline btn-sm" onClick={() => setShowClearConfirm(true)} style={{ color: '#e74c3c', borderColor: '#e74c3c' }}>Clear Storage</button>
             <button className="btn btn-outline btn-sm" onClick={onOpenKeys}>API Keys</button>
           </div>
         </div>
