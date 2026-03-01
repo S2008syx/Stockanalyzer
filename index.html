@@ -673,7 +673,7 @@ Provide your analysis in this EXACT JSON format (no markdown, no code fences, ju
 {
   "oneliner": "One sentence that captures what this company IS at its core — highlight the 1-2 most important things it does. Be specific and concise.",
   "segments": ["Largest revenue/business segment", "Second largest", "Third largest", "Fourth if applicable", "Fifth if applicable"],
-  "growth": "One concise paragraph (2-4 sentences) summarizing what Wall Street analysts expect for this company's growth — include consensus revenue/earnings growth rates, key catalysts or headwinds, and overall analyst sentiment (bullish/neutral/bearish). Use specific numbers where possible."
+  "growth": "Exactly 3 sentences. First, research 3 credible individual analysts or institutions (e.g. Goldman Sachs, Morgan Stanley, JP Morgan, Bank of America, UBS, etc.) who cover this stock, name each one with their specific expected revenue/earnings growth rate, then state the average expected growth rate across the three. Second, summarize why these analysts collectively expect that growth rate — combine their key reasoning (catalysts, tailwinds, market trends) into one sentence. Third, identify the main downside risks or negative factors that could cause actual growth to fall below their expectations."
 }
 The segments array should list 3 to 5 main business segments ordered from largest to smallest revenue contribution. Each item is a short phrase (2-6 words).`;
   const text = await callAI(prompt, apiKeys);
