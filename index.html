@@ -29,7 +29,7 @@
     }
     #root { min-height: 100vh; }
 
-    /* ── Animations ── */
+    /* ââ Animations ââ */
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(12px); }
@@ -37,7 +37,7 @@
     }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
 
-    /* ── Layout ── */
+    /* ââ Layout ââ */
     .app { min-height: 100vh; display: flex; flex-direction: column; }
     .container { max-width: 1240px; margin: 0 auto; padding: 0 28px; width: 100%; }
     .header {
@@ -55,7 +55,7 @@
     .header-actions { position: absolute; right: 0; display: flex; gap: 8px; align-items: center; }
     .main { flex: 1; padding: 28px 0; }
 
-    /* ── Buttons ── */
+    /* ââ Buttons ââ */
     .btn {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 9px 18px; border-radius: var(--radius-sm);
@@ -81,7 +81,7 @@
     }
     .btn-icon:hover { background: rgba(255,255,255,0.06); color: var(--text); }
 
-    /* ── Inputs ── */
+    /* ââ Inputs ââ */
     .input {
       width: 100%; padding: 10px 14px;
       border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -95,7 +95,7 @@
     .input-group { display: flex; flex-direction: column; gap: 6px; }
     .input-label { font-size: 12px; font-weight: 500; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.5px; }
 
-    /* ── Modal ── */
+    /* ââ Modal ââ */
     .modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,.7);
       display: flex; align-items: center; justify-content: center;
@@ -118,7 +118,7 @@
     .modal-body { padding: 24px 28px; }
     .modal-footer { padding: 0 28px 24px; display: flex; justify-content: flex-end; gap: 10px; }
 
-    /* ── Search ── */
+    /* ââ Search ââ */
     .search-wrap { position: relative; margin-bottom: 28px; }
     .search-input { padding-left: 42px; font-size: 14px; font-family: 'Inter', sans-serif; }
     .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
@@ -142,7 +142,7 @@
     }
     .search-item-name { color: var(--text-sec); font-size: 12px; text-align: right; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    /* ── Watchlist ── */
+    /* ââ Watchlist ââ */
     .watchlist { display: flex; flex-direction: column; gap: 8px; }
     .watchlist-empty { text-align: center; padding: 80px 20px; color: var(--text-dim); }
     .watchlist-empty p { margin-top: 8px; font-size: 13px; }
@@ -162,7 +162,7 @@
     .wl-item-name { color: var(--text-sec); font-size: 13px; }
     .wl-item-right { display: flex; align-items: center; gap: 8px; }
 
-    /* ── Detail Header ── */
+    /* ââ Detail Header ââ */
     .detail-header {
       display: flex; align-items: center; gap: 16px;
       margin-bottom: 28px; animation: fadeUp .4s ease-out;
@@ -174,7 +174,7 @@
       font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px;
     }
 
-    /* ── Metrics Grid ── */
+    /* ââ Metrics Grid ââ */
     .metrics-grid {
       display: grid; grid-template-columns: repeat(4, 1fr);
       gap: 12px; margin-bottom: 28px;
@@ -203,7 +203,7 @@
     .metric-input:focus { border-color: var(--accent); border-style: solid; background: rgba(74,222,128,0.05); }
     .metric-calc { font-size: 11px; color: var(--text-dim); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
 
-    /* ── AI Panel ── */
+    /* ââ AI Panel ââ */
     .ai-panel {
       background: var(--card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 24px; margin-bottom: 28px;
@@ -234,7 +234,7 @@
     }
     .ai-loading { text-align: center; padding: 24px; color: var(--text-dim); }
 
-    /* ── Charts Grid ── */
+    /* ââ Charts Grid ââ */
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
     .chart-card {
       background: var(--card); border: 1px solid var(--border);
@@ -252,7 +252,7 @@
     .chart-canvas-wrap { position: relative; height: 250px; }
     .chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
 
-    /* ── Supplement Section ── */
+    /* ââ Supplement Section ââ */
     .supplement { margin-bottom: 28px; }
     .supplement-toggle {
       display: flex; align-items: center; gap: 8px; cursor: pointer;
@@ -263,7 +263,7 @@
     .supplement-toggle:hover { background: var(--card-hover); border-color: var(--border-hover); }
     .supplement-body { margin-top: 14px; }
 
-    /* ── Pie Grid ── */
+    /* ââ Pie Grid ââ */
     .pie-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
     .pie-card {
       background: var(--card); border: 1px solid var(--border);
@@ -275,7 +275,7 @@
     .pie-canvas-wrap { position: relative; height: 260px; }
     .pie-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
 
-    /* ── Price Alert List ── */
+    /* ââ Price Alert List ââ */
     .alert-section { margin-bottom: 28px; animation: fadeUp .4s ease-out both; }
     .alert-list { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
     .alert-row {
@@ -292,7 +292,7 @@
     .alert-down { background: rgba(248,113,113,0.08); color: var(--danger); }
     .alert-news { color: var(--text-sec); font-family: 'Inter', sans-serif; }
 
-    /* ── Data Checklist ── */
+    /* ââ Data Checklist ââ */
     .checklist { display: flex; flex-direction: column; gap: 8px; }
     .checklist-item {
       padding: 14px 16px; background: var(--bg-raised);
@@ -325,7 +325,7 @@
     .checklist-dist-row .input { flex: 1; }
     .checklist-dist-row .btn { flex-shrink: 0; }
 
-    /* ── Footer ── */
+    /* ââ Footer ââ */
     .detail-footer {
       background: var(--card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 20px 24px; margin-bottom: 28px;
@@ -336,7 +336,7 @@
     .detail-footer li { font-size: 12px; color: var(--text-sec); padding-left: 16px; position: relative; }
     .detail-footer li::before { content: '\2022'; position: absolute; left: 0; color: var(--warn); }
 
-    /* ── Utilities ── */
+    /* ââ Utilities ââ */
     .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
     .spinner-lg { width: 32px; height: 32px; border-width: 3px; }
     .loading-overlay {
@@ -354,7 +354,7 @@
     .gap-2 { gap: 8px; }
     .hidden { display: none; }
 
-    /* ── AI Key Prompt ── */
+    /* ââ AI Key Prompt ââ */
     .ai-key-prompt {
       background: var(--card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 24px;
@@ -383,13 +383,13 @@
     .ai-key-feedback.success { color: var(--success); }
     .ai-key-feedback.error { color: var(--danger); font-weight: 600; }
 
-    /* ── Scrollbar ── */
+    /* ââ Scrollbar ââ */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
 
-    /* ── Responsive ── */
+    /* ââ Responsive ââ */
     @media (max-width: 768px) {
       .metrics-grid { grid-template-columns: repeat(2, 1fr); }
       .charts-grid { grid-template-columns: 1fr; }
@@ -449,7 +449,7 @@ function getStore(key, fallback) {
 }
 function setStore(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 function getDevDefaults() {
-  const hardcoded = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: '', openrouter: '' };
+  const hardcoded = { fmp: 'ItgCk9X8nLUvYSqIn69qRoMQHlyAoJTz', claude: '', finnhub: 'd6hneg9r01qr5k4clmegd6hneg9r01qr5k4clmf0', openrouter: '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' };
   return getStore('sa_dev_defaults', hardcoded);
 }
 function setDevDefaults(d) { setStore('sa_dev_defaults', d); }
@@ -676,7 +676,7 @@ FCF: $${fmtBigNum(stockInfo.fcf)}
 
 Provide your analysis in this EXACT JSON format (no markdown, no code fences, just raw JSON):
 {
-  "oneliner": "One sentence that captures what this company IS at its core — highlight the 1-2 most important things it does. E.g. Apple: 'A company selling phones and a software derivative ecosystem.' Amazon: 'Cloud infrastructure and online retail.' Tesla: 'Electric cars and autonomous driving.' Be specific and concise.",
+  "oneliner": "One sentence that captures what this company IS at its core â highlight the 1-2 most important things it does. E.g. Apple: 'A company selling phones and a software derivative ecosystem.' Amazon: 'Cloud infrastructure and online retail.' Tesla: 'Electric cars and autonomous driving.' Be specific and concise.",
   "segments": ["Largest revenue/business segment", "Second largest", "Third largest", "Fourth if applicable", "Fifth if applicable"]
 }
 The segments array should list 3 to 5 main business segments ordered from largest to smallest revenue contribution. Each item is a short phrase (2-6 words).`;
@@ -1056,7 +1056,7 @@ function ApiKeyModal({ keys, onSave }) {
               <label className="input-label">OpenRouter API Key *</label>
               <input className="input" value={openrouter} onChange={e => setOpenrouter(e.target.value)} placeholder="sk-or-..." type="password" />
               <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                Get your key at openrouter.ai — uses Claude Haiku via OpenRouter
+                Get your key at openrouter.ai â uses Claude Haiku via OpenRouter
               </span>
             </div>
           )}
@@ -1529,7 +1529,7 @@ function MetricsTable({ data, overrides, onOverrideChange, finnhubKey, onFinnhub
       setFhFeedback({ type: 'success', msg: 'Key verified! Fetching data...' });
       onFinnhubKeySubmit(fhKeyInput.trim());
     } catch (e) {
-      setFhFeedback({ type: 'error', msg: `Invalid key — ${e.message}` });
+      setFhFeedback({ type: 'error', msg: `Invalid key â ${e.message}` });
     } finally {
       setFhTesting(false);
     }
@@ -1643,7 +1643,7 @@ function AiKeyPrompt({ apiKeys, onKeySubmit }) {
       onKeySubmit({ ...testKeys });
     } catch (e) {
       const msg = e.message || 'Key is inaccessible';
-      setFeedback({ type: 'error', msg: `Key is inaccessible — ${msg}` });
+      setFeedback({ type: 'error', msg: `Key is inaccessible â ${msg}` });
     } finally {
       setTesting(false);
     }
@@ -1653,7 +1653,7 @@ function AiKeyPrompt({ apiKeys, onKeySubmit }) {
     <div className="ai-key-prompt">
       <h3>AI Insights</h3>
       <div className="ai-key-status">
-        AI features are disabled — {provider === 'openrouter' ? 'OpenRouter' : 'Claude'} API key is <span className={statusClass}>{statusLabel}</span>.
+        AI features are disabled â {provider === 'openrouter' ? 'OpenRouter' : 'Claude'} API key is <span className={statusClass}>{statusLabel}</span>.
         <br />Enter a valid API key below to enable AI Insights and News Analysis.
       </div>
       <div className="ai-key-input-row">
@@ -1830,7 +1830,7 @@ function PriceAlertChart({ prices1y, significantDays }) {
 // SECTION 13: PRICE ALERT LIST
 // ============================================================
 function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubmit }) {
-  // No AI key at all — show single prompt, hide everything
+  // No AI key at all â show single prompt, hide everything
   if (!aiKeyValid) {
     return (
       <div className="alert-section">
@@ -1843,7 +1843,7 @@ function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubm
       </div>
     );
   }
-  // AI key valid but no Finnhub — show Finnhub input prompt
+  // AI key valid but no Finnhub â show Finnhub input prompt
   if (!finnhubKey) {
     return (
       <div className="alert-section">
@@ -1908,7 +1908,7 @@ function FinnhubKeyPrompt({ onSubmit }) {
       setFeedback({ type: 'success', msg: 'Finnhub key verified!' });
       onSubmit(keyInput.trim());
     } catch (e) {
-      setFeedback({ type: 'error', msg: `Finnhub key is inaccessible — ${e.message}` });
+      setFeedback({ type: 'error', msg: `Finnhub key is inaccessible â ${e.message}` });
     } finally {
       setTesting(false);
     }
@@ -1917,7 +1917,7 @@ function FinnhubKeyPrompt({ onSubmit }) {
   return (
     <div className="ai-key-prompt" style={{ marginBottom: 0 }}>
       <div className="ai-key-status">
-        Finnhub API key is <span className="key-missing">missing</span> — needed for targeted news fetching by date.
+        Finnhub API key is <span className="key-missing">missing</span> â needed for targeted news fetching by date.
       </div>
       <div className="ai-key-input-row">
         <input
@@ -2500,7 +2500,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     setKeyVersion(v => v + 1);
   }
 
-  // Handle Finnhub key submission — sync everywhere + re-fetch analyst data
+  // Handle Finnhub key submission â sync everywhere + re-fetch analyst data
   async function handleFinnhubSubmit(finnhubKey) {
     const newKeys = { ...localApiKeys, finnhub: finnhubKey };
     setLocalApiKeys(newKeys);
