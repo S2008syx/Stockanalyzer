@@ -2559,23 +2559,29 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     if (!hasAiKey(localApiKeys) || !localApiKeys.finnhub) return;
     let cancelled = false;
     setAlertsLoading(true);
+    const processDay = async (day) => {
+      let news = [];
+      try {
+        news = await fetchFinnhubNews(stock.ticker, day.date, localApiKeys.finnhub);
+      } catch {}
+      let newsSummary = '';
+      if (news.length > 0 && hasAiKey(localApiKeys)) {
+        try {
+          newsSummary = await fetchAiNewsSummary(news, localApiKeys);
+        } catch { newsSummary = news[0]?.headline || news[0]?.title || 'News found but summary unavailable.'; }
+      } else if (news.length > 0) {
+        newsSummary = news[0]?.headline || news[0]?.title || 'News available but AI key missing for summary.';
+      }
+      return { ...day, newsSummary };
+    };
     const fetchNews = async () => {
       const results = [];
-      for (const day of significantDays) {
+      // Process in batches of 5 to avoid overwhelming APIs
+      for (let i = 0; i < significantDays.length; i += 5) {
         if (cancelled) return;
-        let news = [];
-        try {
-          news = await fetchFinnhubNews(stock.ticker, day.date, localApiKeys.finnhub);
-        } catch {}
-        let newsSummary = '';
-        if (news.length > 0 && hasAiKey(localApiKeys)) {
-          try {
-            newsSummary = await fetchAiNewsSummary(news, localApiKeys);
-          } catch { newsSummary = news[0]?.headline || news[0]?.title || 'News found but summary unavailable.'; }
-        } else if (news.length > 0) {
-          newsSummary = news[0]?.headline || news[0]?.title || 'News available but AI key missing for summary.';
-        }
-        results.push({ ...day, newsSummary });
+        const batch = significantDays.slice(i, i + 5);
+        const batchResults = await Promise.all(batch.map(processDay));
+        results.push(...batchResults);
       }
       if (!cancelled) {
         setAlerts(results);
