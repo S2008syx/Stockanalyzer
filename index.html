@@ -1106,7 +1106,7 @@ function buildChecklist(rawData) {
   // Map checklist keys to their data source error keys
   const errorSourceMap = {
     pe15: 'ratios', ps15: 'ratios',
-    ebitda15: 'income', mktcap15: 'ev', fcf15: 'cashflow',
+    ebitda15: 'income', mktcap15: 'ev', fcf15: 'cashflow', ocf15: 'cashflow',
     price: 'profile', eps: 'profile', shares: 'profile',
     geo: 'geo', seg: 'seg', prices1y: 'prices1y', sig5: 'prices1y',
     analystTarget: 'priceTarget', analystRating: 'rating',
@@ -1141,6 +1141,11 @@ function buildChecklist(rawData) {
     year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null), value: d.freeCashFlow
   })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
   status.fcf15 = buildHistoryStatus(fcfYears, yearList);
+
+  const ocfYears = cashflow.map(d => ({
+    year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null), value: d.operatingCashFlow
+  })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  status.ocf15 = buildHistoryStatus(ocfYears, yearList);
 
   status.price = { available: profile && profile.price ? 1 : 0, total: 1, data: profile ? profile.price : null };
   const eps = profile ? (profile.eps || null) : null;
@@ -2584,9 +2589,9 @@ function MissingDataFooter({ checklist }) {
 // ============================================================
 // SECTION 16: SUPPLEMENT CHARTS SECTION
 // ============================================================
-function SupplementSection({ mktCapEbitda, epsSeries, psSeries, ebitdaSeries, expectedYears }) {
+function SupplementSection({ mktCapEbitda, epsSeries, psSeries, expectedYears }) {
   const [open, setOpen] = useState(false);
-  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (ebitdaSeries || []).length, (mktCapEbitda || []).length);
+  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (mktCapEbitda || []).length);
   const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
   return (
     <div className="supplement">
@@ -2599,7 +2604,6 @@ function SupplementSection({ mktCapEbitda, epsSeries, psSeries, ebitdaSeries, ex
           <div className="charts-grid">
             <HistoryChart title={`${tag} EPS`} series={epsSeries || []} yLabel="EPS" color="#F472B6" formatFn={v => '$' + fmtNum(v, 2)} />
             <HistoryChart title={`${tag} PS Ratio`} series={psSeries || []} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
-            <HistoryChart title={`${tag} EBITDA`} series={ebitdaSeries || []} yLabel="EBITDA" color="#60A5FA" formatFn={v => '$' + fmtBigNum(v)} />
             <HistoryChart
               title={`${tag} Market Cap / EBITDA`}
               series={(mktCapEbitda || []).map(d => ({ year: d.year, value: d.ratio }))}
@@ -2833,6 +2837,11 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     return mergeHistoryInputs(checklist.fcf15?.data || [], 'fcf15', v => v * 1e9);
   }, [checklist, userInputs]);
 
+  // OCF (Operating Cash Flow) series
+  const ocfSeries = useMemo(() => {
+    return mergeHistoryInputs(checklist.ocf15?.data || [], 'ocf15', v => v * 1e9);
+  }, [checklist, userInputs]);
+
   // Price alert: calculate significant days
   const dailyChanges = useMemo(() => calcDailyChanges(prices1y), [prices1y]);
   const significantDays = useMemo(() => findSignificantChanges(dailyChanges), [dailyChanges]);
@@ -2986,12 +2995,14 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
                 <HistoryChart title={`${tag} PE Ratio`} series={peSeries} yLabel="PE" color="#4ADE80" formatFn={v => safePE(v).toString()} />
                 <HistoryChart title={`${tag} Market Cap`} series={mktcapSeries} yLabel="Mkt Cap" color="#FB923C" formatFn={v => '$' + fmtBigNum(v)} />
                 <HistoryChart title={`${tag} Free Cash Flow`} series={fcfSeries} yLabel="FCF" color="#22D3EE" formatFn={v => '$' + fmtBigNum(v)} />
+                <HistoryChart title={`${tag} EBITDA`} series={ebitdaSeries} yLabel="EBITDA" color="#60A5FA" formatFn={v => '$' + fmtBigNum(v)} />
+                <HistoryChart title={`${tag} Operating Cash Flow`} series={ocfSeries} yLabel="OCF" color="#34D399" formatFn={v => '$' + fmtBigNum(v)} />
                 <PriceAlertChart prices1y={prices1y} significantDays={significantDays} />
               </>;
             })()}
           </div>
 
-          <SupplementSection mktCapEbitda={mktCapEbitda} epsSeries={epsSeries} psSeries={psSeries} ebitdaSeries={ebitdaSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementSection mktCapEbitda={mktCapEbitda} epsSeries={epsSeries} psSeries={psSeries} expectedYears={checklist._meta?.expectedYears} />
 
           <DistributionSection geo={geo} seg={seg} />
 
