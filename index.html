@@ -535,7 +535,28 @@ async function fetchSegRevenue(ticker, key) {
   catch { return null; }
 }
 
-async function fetchPriceTargetConsensus(ticker, finnhubKey) {
+async function fetchPriceTargetConsensus(ticker, fmpKey, finnhubKey) {
+  // Try FMP first (key is always available)
+  if (fmpKey) {
+    try {
+      const r = await fetch(`${FMP_STABLE}/price-target-consensus?symbol=${ticker}&apikey=${fmpKey}`);
+      if (r.ok) {
+        const d = await r.json();
+        // FMP may return array or single object
+        const items = Array.isArray(d) ? d : (d ? [d] : []);
+        const valid = items.filter(i => i && i.targetConsensus != null);
+        if (valid.length === 1) {
+          const v = valid[0];
+          return { targetConsensus: v.targetConsensus, targetHigh: v.targetHigh, targetLow: v.targetLow, targetMedian: v.targetMedian };
+        }
+        if (valid.length > 1) {
+          const avg = (field) => { const vals = valid.map(i => i[field]).filter(x => x != null); return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null; };
+          return { targetConsensus: avg('targetConsensus'), targetHigh: avg('targetHigh'), targetLow: avg('targetLow'), targetMedian: avg('targetMedian') };
+        }
+      }
+    } catch {}
+  }
+  // Fallback to Finnhub
   if (!finnhubKey) return null;
   try {
     const r = await fetch(`${FINNHUB}/stock/price-target?symbol=${ticker}&token=${finnhubKey}`);
@@ -546,7 +567,24 @@ async function fetchPriceTargetConsensus(ticker, finnhubKey) {
   } catch { return null; }
 }
 
-async function fetchRatingConsensus(ticker, finnhubKey) {
+async function fetchRatingConsensus(ticker, fmpKey, finnhubKey) {
+  // Try FMP first
+  if (fmpKey) {
+    try {
+      const r = await fetch(`${FMP_STABLE}/upgrades-downgrades-consensus?symbol=${ticker}&apikey=${fmpKey}`);
+      if (r.ok) {
+        const d = await r.json();
+        const items = Array.isArray(d) ? d : (d ? [d] : []);
+        const valid = items.filter(i => i && i.consensus);
+        if (valid.length > 0) {
+          const v = valid[0];
+          const sb = v.strongBuy || 0, b = v.buy || 0, h = v.hold || 0, s = v.sell || 0, ss = v.strongSell || 0;
+          return { strongBuy: sb, buy: b, hold: h, sell: s, strongSell: ss, consensus: v.consensus };
+        }
+      }
+    } catch {}
+  }
+  // Fallback to Finnhub
   if (!finnhubKey) return null;
   try {
     const r = await fetch(`${FINNHUB}/stock/recommendation?symbol=${ticker}&token=${finnhubKey}`);
@@ -581,8 +619,8 @@ async function fetchAllStockData(ticker, keys) {
     fetchRatios(ticker, keys.fmp).then(d => results.ratios = d).catch(e => { results.ratios = []; errors.ratios = e.message; }),
     fetchGeoRevenue(ticker, keys.fmp).then(d => results.geo = d).catch(e => { results.geo = null; errors.geo = e.message; }),
     fetchSegRevenue(ticker, keys.fmp).then(d => results.seg = d).catch(e => { results.seg = null; errors.seg = e.message; }),
-    fetchPriceTargetConsensus(ticker, keys.finnhub).then(d => results.priceTarget = d).catch(e => { results.priceTarget = null; errors.priceTarget = e.message; }),
-    fetchRatingConsensus(ticker, keys.finnhub).then(d => results.rating = d).catch(e => { results.rating = null; errors.rating = e.message; }),
+    fetchPriceTargetConsensus(ticker, keys.fmp, keys.finnhub).then(d => results.priceTarget = d).catch(e => { results.priceTarget = null; errors.priceTarget = e.message; }),
+    fetchRatingConsensus(ticker, keys.fmp, keys.finnhub).then(d => results.rating = d).catch(e => { results.rating = null; errors.rating = e.message; }),
   ];
   await Promise.all(tasks);
   results._errors = errors;
@@ -2685,8 +2723,8 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     setAnalystLoading(true);
     try {
       const [pt, rt] = await Promise.all([
-        fetchPriceTargetConsensus(stock.ticker, finnhubKey),
-        fetchRatingConsensus(stock.ticker, finnhubKey),
+        fetchPriceTargetConsensus(stock.ticker, localApiKeys.fmp, finnhubKey),
+        fetchRatingConsensus(stock.ticker, localApiKeys.fmp, finnhubKey),
       ]);
       if (pt) setLocalPriceTarget(pt);
       if (rt) setLocalRating(rt);
