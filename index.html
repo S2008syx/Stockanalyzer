@@ -333,7 +333,7 @@
     .alert-section { margin-bottom: 28px; animation: fadeUp .4s ease-out both; }
     .alert-list { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
     .alert-row {
-      display: grid; grid-template-columns: 100px 80px 1fr;
+      display: grid; grid-template-columns: 100px 80px 1fr 90px;
       gap: 14px; padding: 12px 16px; background: var(--card);
       border: 1px solid var(--border); border-radius: var(--radius-sm);
       font-size: 12px; align-items: center; transition: all .2s;
@@ -345,6 +345,11 @@
     .alert-up { background: rgba(74,222,128,0.08); color: var(--success); }
     .alert-down { background: rgba(248,113,113,0.08); color: var(--danger); }
     .alert-news { color: var(--text-sec); font-family: 'Inter', sans-serif; }
+    .alert-category { font-size: 11px; font-weight: 600; text-align: center; padding: 3px 8px; border: 1.5px solid; border-radius: 6px; font-family: 'Inter', sans-serif; }
+    .news-briefing { margin-top: 14px; padding: 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+    .news-briefing-item { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; font-size: 13px; line-height: 1.6; }
+    .news-briefing-item:last-child { margin-bottom: 0; }
+    .news-briefing-badge { font-size: 10px; font-weight: 700; color: #0F172A; padding: 2px 8px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
 
     /* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Data Checklist ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
     .checklist { display: flex; flex-direction: column; gap: 8px; }
@@ -449,7 +454,7 @@
       .charts-grid { grid-template-columns: 1fr; }
       .pie-grid { grid-template-columns: 1fr; }
       .ai-bullets { grid-template-columns: 1fr; }
-      .alert-row { grid-template-columns: 80px 60px 1fr; font-size: 11px; }
+      .alert-row { grid-template-columns: 80px 60px 1fr 70px; font-size: 11px; }
       .container { padding: 0 16px; }
     }
   </style>
@@ -946,17 +951,49 @@ If the question IS related to stocks/finance/investing:
 
 // AI: Summarize news for price alert dates
 async function fetchAiNewsSummary(newsItems, apiKeys) {
-  if (!newsItems || newsItems.length === 0) return 'No news available for this date.';
+  if (!newsItems || newsItems.length === 0) return { summary: 'No news available for this date.', category: 'other' };
   const headlines = newsItems.map(n => n.headline || n.title || '').filter(Boolean).slice(0, 5).join('\n- ');
   const prompt = `Given these news headlines for a stock on a day with >5% price change:
 - ${headlines}
 
-Write ONE concise sentence (max 30 words) summarizing what likely caused the price movement. Output ONLY the sentence, nothing else.`;
+Respond in this EXACT JSON format (no markdown, no code fences):
+{"summary": "One concise sentence (max 30 words) summarizing what likely caused the price movement.", "category": "one of: macro, fundamentals, tech, other"}
+
+Category rules:
+- "macro": macroeconomic factors (interest rates, inflation, trade policy, tariffs, GDP, Fed, geopolitics)
+- "fundamentals": company-specific (earnings, revenue, guidance, management, M&A, dividends, buybacks)
+- "tech": new technology disruption (AI breakthroughs, chip advances, new product launches, tech competition)
+- "other": anything else (analyst ratings, market sentiment, sector rotation, legal/regulatory)
+
+Output ONLY the JSON, nothing else.`;
   try {
-    return await callAI(prompt, apiKeys, 100);
+    const text = await callAI(prompt, apiKeys, 150);
+    const jsonStr = extractJSON(text);
+    if (jsonStr) {
+      const parsed = JSON.parse(jsonStr);
+      return { summary: parsed.summary || text, category: parsed.category || 'other' };
+    }
+    return { summary: text, category: 'other' };
   } catch {
-    return 'AI summary unavailable.';
+    return { summary: 'AI summary unavailable.', category: 'other' };
   }
+}
+
+async function fetchAiNewsBriefing(alerts, stockInfo, apiKeys) {
+  const lines = (alerts || []).map(a => `${a.date} (${a.change >= 0 ? '+' : ''}${a.change.toFixed(1)}%): ${a.newsSummary || 'No summary'} [${a.category || 'other'}]`).join('\n');
+  const prompt = `You are analyzing significant price movement days (>5% change) for ${stockInfo.name} (${stockInfo.ticker}).
+
+Here are the events:
+${lines}
+
+Write a 4-bullet news briefing. Each bullet is one sentence (max 25 words). Do NOT use any markdown formatting. Use plain text only.
+Return EXACTLY this JSON (no markdown, no code fences):
+{"macro": "One sentence about macroeconomic factors that affected this stock.", "fundamentals": "One sentence about company fundamentals events.", "tech": "One sentence about technology/AI disruption impact.", "other": "One sentence about other notable factors."}
+If a category has no relevant events, write "No significant events in this category."`;
+  const text = await callAI(prompt, apiKeys, 300);
+  const jsonStr = extractJSON(text);
+  if (jsonStr) return JSON.parse(jsonStr);
+  throw new Error('Failed to parse news briefing');
 }
 
 // ============================================================
@@ -2415,62 +2452,107 @@ function PriceAlertChart({ prices1y, significantDays }) {
 // ============================================================
 // SECTION 13: PRICE ALERT LIST
 // ============================================================
-function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubmit }) {
-  // No AI key at all ÃÂ¢ÃÂÃÂ show single prompt, hide everything
+const CATEGORY_COLORS = { macro: '#60A5FA', fundamentals: '#4ADE80', tech: '#F87171', other: '#9CA3AF' };
+const CATEGORY_LABELS = { macro: 'Macro', fundamentals: 'Fundamentals', tech: 'Tech', other: 'Other' };
+
+function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubmit, stockInfo, apiKeys }) {
+  const [open, setOpen] = useState(false);
+  const [briefing, setBriefing] = useState(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
+
+  async function handleGenerateBriefing() {
+    if (briefingLoading || briefing) return;
+    setBriefingLoading(true);
+    try {
+      const result = await fetchAiNewsBriefing(alerts, stockInfo, apiKeys);
+      setBriefing(result);
+    } catch { setBriefing({ macro: 'Failed to generate.', fundamentals: 'Failed to generate.', tech: 'Failed to generate.', other: 'Failed to generate.' }); }
+    finally { setBriefingLoading(false); }
+  }
+
   if (!aiKeyValid) {
     return (
       <div className="alert-section">
-        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Price Alerts (&gt;5% Daily Change)</h3>
-        <div className="ai-key-prompt" style={{ marginBottom: 0 }}>
-          <div className="ai-key-status">
-            Requires a valid AI API key to analyze news for significant price movements.
+        <button className="supplement-toggle" onClick={() => setOpen(!open)}>
+          <span>{open ? '\u25BC' : '\u25B6'}</span>
+          <span>Price Alerts (&gt;5% Daily Change)</span>
+        </button>
+        {open && (
+          <div className="ai-key-prompt" style={{ marginTop: 14, marginBottom: 0 }}>
+            <div className="ai-key-status">Requires a valid AI API key to analyze news for significant price movements.</div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
-  // AI key valid but no Finnhub ÃÂ¢ÃÂÃÂ show Finnhub input prompt
   if (!finnhubKey) {
     return (
       <div className="alert-section">
-        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Price Alerts (&gt;5% Daily Change)</h3>
-        <FinnhubKeyPrompt onSubmit={onFinnhubSubmit} />
-      </div>
-    );
-  }
-  if (loading) {
-    return (
-      <div className="alert-section">
-        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Price Alerts (&gt;5% Daily Change)</h3>
-        <div className="text-center text-sec"><Spinner /> Fetching news for alert dates...</div>
-      </div>
-    );
-  }
-  if (!alerts || alerts.length === 0) {
-    return (
-      <div className="alert-section">
-        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Price Alerts (&gt;5% Daily Change)</h3>
-        <p className="text-sec" style={{ fontSize: 13 }}>No days with &gt;5% price change in the last year.</p>
+        <button className="supplement-toggle" onClick={() => setOpen(!open)}>
+          <span>{open ? '\u25BC' : '\u25B6'}</span>
+          <span>Price Alerts (&gt;5% Daily Change)</span>
+        </button>
+        {open && <div style={{ marginTop: 14 }}><FinnhubKeyPrompt onSubmit={onFinnhubSubmit} /></div>}
       </div>
     );
   }
   return (
     <div className="alert-section">
-      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Price Alerts (&gt;5% Daily Change)</h3>
-      <div className="alert-list">
-        <div className="alert-row" style={{ fontWeight: 600, background: 'var(--bg)' }}>
-          <span>Date</span><span style={{ textAlign: 'center' }}>Change</span><span>News Summary</span>
+      <button className="supplement-toggle" onClick={() => setOpen(!open)}>
+        <span>{open ? '\u25BC' : '\u25B6'}</span>
+        <span>Price Alerts (&gt;5% Daily Change)</span>
+        {!open && alerts && alerts.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 400, marginLeft: 'auto' }}>{alerts.length} event{alerts.length !== 1 ? 's' : ''}</span>}
+      </button>
+      {open && (
+        <div style={{ marginTop: 14 }}>
+          {loading && <div className="text-center text-sec"><Spinner /> Fetching news for alert dates...</div>}
+          {!loading && (!alerts || alerts.length === 0) && (
+            <p className="text-sec" style={{ fontSize: 13 }}>No days with &gt;5% price change in the last year.</p>
+          )}
+          {!loading && alerts && alerts.length > 0 && (
+            <>
+              <div className="alert-list">
+                <div className="alert-row" style={{ fontWeight: 600, background: 'var(--bg)' }}>
+                  <span>Date</span><span style={{ textAlign: 'center' }}>Change</span><span>News Summary</span><span style={{ textAlign: 'center' }}>Category</span>
+                </div>
+                {alerts.map((a) => {
+                  const cat = a.category || 'other';
+                  const color = CATEGORY_COLORS[cat] || CATEGORY_COLORS.other;
+                  const label = CATEGORY_LABELS[cat] || 'Other';
+                  return (
+                    <div key={`${a.date}_${a.change}`} className="alert-row">
+                      <span className="alert-date">{a.date}</span>
+                      <span className={`alert-change ${a.change >= 0 ? 'alert-up' : 'alert-down'}`}>{fmtPct(a.change)}</span>
+                      <span className="alert-news">{a.newsSummary || 'No news available'}</span>
+                      <span className="alert-category" style={{ borderColor: color, color }}>{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!briefing && (
+                <div style={{ marginTop: 14, textAlign: 'center' }}>
+                  <button className="btn btn-outline btn-sm" onClick={handleGenerateBriefing} disabled={briefingLoading}>
+                    {briefingLoading ? <><Spinner /> Generating...</> : 'Generate News Briefing'}
+                  </button>
+                </div>
+              )}
+
+              {briefing && (
+                <div className="news-briefing">
+                  <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>News Briefing</h4>
+                  {['macro', 'fundamentals', 'tech', 'other'].map(cat => (
+                    <div key={cat} className="news-briefing-item">
+                      <span className="news-briefing-badge" style={{ background: CATEGORY_COLORS[cat] }}>{CATEGORY_LABELS[cat]}</span>
+                      <span>{stripMarkdown(briefing[cat] || 'No significant events.')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
-        {alerts.map((a) => (
-          <div key={`${a.date}_${a.change}`} className="alert-row">
-            <span className="alert-date">{a.date}</span>
-            <span className={`alert-change ${a.change >= 0 ? 'alert-up' : 'alert-down'}`}>
-              {fmtPct(a.change)}
-            </span>
-            <span className="alert-news">{a.newsSummary || 'No news available'}</span>
-          </div>
-        ))}
-      </div>
+      )}
     </div>
   );
 }
@@ -3060,14 +3142,17 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
         news = await fetchFinnhubNews(stock.ticker, day.date, localApiKeys.finnhub);
       } catch {}
       let newsSummary = '';
+      let category = 'other';
       if (news.length > 0 && hasAiKey(localApiKeys)) {
         try {
-          newsSummary = await fetchAiNewsSummary(news, localApiKeys);
+          const result = await fetchAiNewsSummary(news, localApiKeys);
+          newsSummary = result.summary;
+          category = result.category;
         } catch { newsSummary = news[0]?.headline || news[0]?.title || 'News found but summary unavailable.'; }
       } else if (news.length > 0) {
         newsSummary = news[0]?.headline || news[0]?.title || 'News available but AI key missing for summary.';
       }
-      return { ...day, newsSummary };
+      return { ...day, newsSummary, category };
     };
     const fetchNews = async () => {
       const results = [];
@@ -3162,6 +3247,8 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
             aiKeyValid={hasAiKey(localApiKeys)}
             finnhubKey={localApiKeys.finnhub}
             onFinnhubSubmit={handleFinnhubSubmit}
+            stockInfo={{ name: stock.name, ticker: stock.ticker }}
+            apiKeys={localApiKeys}
           />
 
           <MissingDataFooter checklist={checklist} />
