@@ -345,7 +345,16 @@
     .alert-up { background: rgba(74,222,128,0.08); color: var(--success); }
     .alert-down { background: rgba(248,113,113,0.08); color: var(--danger); }
     .alert-news { color: var(--text-sec); font-family: 'Inter', sans-serif; }
-    .alert-category { font-size: 11px; font-weight: 600; text-align: center; padding: 3px 8px; border: 1.5px solid; border-radius: 6px; font-family: 'Inter', sans-serif; }
+    .alert-category-select {
+      font-size: 11px; font-weight: 600; text-align: center; padding: 3px 6px;
+      border: 1.5px solid; border-radius: 6px; font-family: 'Inter', sans-serif;
+      background: transparent; cursor: pointer; appearance: none;
+      -webkit-appearance: none; -moz-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%239CA3AF' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 6px center;
+      padding-right: 18px;
+    }
+    .alert-category-select:focus { outline: none; box-shadow: 0 0 0 2px rgba(96,165,250,0.3); }
     .news-briefing { margin-top: 14px; padding: 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
     .news-briefing-item { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; font-size: 13px; line-height: 1.6; }
     .news-briefing-item:last-child { margin-bottom: 0; }
@@ -961,9 +970,9 @@ Respond in this EXACT JSON format (no markdown, no code fences):
 
 Category rules:
 - "macro": macroeconomic factors (interest rates, inflation, trade policy, tariffs, GDP, Fed, geopolitics)
-- "fundamentals": company-specific (earnings, revenue, guidance, management, M&A, dividends, buybacks)
+- "fundamentals": company-specific (earnings, revenue, guidance, management, M&A, dividends, buybacks, outlook, earnings beat/miss)
 - "tech": new technology disruption (AI breakthroughs, chip advances, new product launches, tech competition)
-- "other": anything else (analyst ratings, market sentiment, sector rotation, legal/regulatory)
+- "other": ONLY use this if the news does NOT fit any of the above three categories at all. If it partially matches macro, fundamentals, or tech, choose the best-fitting one instead. Never default to "other".
 
 Output ONLY the JSON, nothing else.`;
   try {
@@ -2459,12 +2468,41 @@ function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubm
   const [open, setOpen] = useState(false);
   const [briefing, setBriefing] = useState(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
+  // Category overrides: { "2024-08-05_-5.8": "macro", ... }
+  const [catOverrides, setCatOverrides] = useState({});
+
+  function getAlertKey(a) { return `${a.date}_${a.change}`; }
+
+  function getCategory(a) {
+    const key = getAlertKey(a);
+    return catOverrides[key] || a.category || 'other';
+  }
+
+  function handleCatChange(a, newCat) {
+    const key = getAlertKey(a);
+    setCatOverrides(prev => ({ ...prev, [key]: newCat }));
+  }
+
+  // Build alerts with effective categories for briefing
+  function getEffectiveAlerts() {
+    return (alerts || []).map(a => ({ ...a, category: getCategory(a) }));
+  }
 
   async function handleGenerateBriefing() {
-    if (briefingLoading || briefing) return;
+    if (briefingLoading) return;
     setBriefingLoading(true);
     try {
-      const result = await fetchAiNewsBriefing(alerts, stockInfo, apiKeys);
+      const result = await fetchAiNewsBriefing(getEffectiveAlerts(), stockInfo, apiKeys);
+      setBriefing(result);
+    } catch { setBriefing({ macro: 'Failed to generate.', fundamentals: 'Failed to generate.', tech: 'Failed to generate.', other: 'Failed to generate.' }); }
+    finally { setBriefingLoading(false); }
+  }
+
+  async function handleRegenerateBriefing() {
+    setBriefing(null);
+    setBriefingLoading(true);
+    try {
+      const result = await fetchAiNewsBriefing(getEffectiveAlerts(), stockInfo, apiKeys);
       setBriefing(result);
     } catch { setBriefing({ macro: 'Failed to generate.', fundamentals: 'Failed to generate.', tech: 'Failed to generate.', other: 'Failed to generate.' }); }
     finally { setBriefingLoading(false); }
@@ -2516,31 +2554,51 @@ function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubm
                   <span>Date</span><span style={{ textAlign: 'center' }}>Change</span><span>News Summary</span><span style={{ textAlign: 'center' }}>Category</span>
                 </div>
                 {alerts.map((a) => {
-                  const cat = a.category || 'other';
+                  const cat = getCategory(a);
                   const color = CATEGORY_COLORS[cat] || CATEGORY_COLORS.other;
-                  const label = CATEGORY_LABELS[cat] || 'Other';
                   return (
-                    <div key={`${a.date}_${a.change}`} className="alert-row">
+                    <div key={getAlertKey(a)} className="alert-row">
                       <span className="alert-date">{a.date}</span>
                       <span className={`alert-change ${a.change >= 0 ? 'alert-up' : 'alert-down'}`}>{fmtPct(a.change)}</span>
                       <span className="alert-news">{a.newsSummary || 'No news available'}</span>
-                      <span className="alert-category" style={{ borderColor: color, color }}>{label}</span>
+                      <select
+                        className="alert-category-select"
+                        style={{ borderColor: color, color }}
+                        value={cat}
+                        onChange={e => handleCatChange(a, e.target.value)}
+                      >
+                        <option value="macro">Macro</option>
+                        <option value="fundamentals">Fundamentals</option>
+                        <option value="tech">Tech</option>
+                        <option value="other">Other</option>
+                      </select>
                     </div>
                   );
                 })}
               </div>
 
-              {!briefing && (
+              {!briefing && !briefingLoading && (
                 <div style={{ marginTop: 14, textAlign: 'center' }}>
-                  <button className="btn btn-outline btn-sm" onClick={handleGenerateBriefing} disabled={briefingLoading}>
-                    {briefingLoading ? <><Spinner /> Generating...</> : 'Generate News Briefing'}
+                  <button className="btn btn-outline btn-sm" onClick={handleGenerateBriefing}>
+                    Generate News Briefing
                   </button>
+                </div>
+              )}
+
+              {briefingLoading && (
+                <div style={{ marginTop: 14, textAlign: 'center' }} className="text-sec">
+                  <Spinner /> Generating briefing...
                 </div>
               )}
 
               {briefing && (
                 <div className="news-briefing">
-                  <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>News Briefing</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>News Briefing</h4>
+                    <button className="btn btn-outline btn-sm" onClick={handleRegenerateBriefing} disabled={briefingLoading} style={{ fontSize: 11, padding: '3px 10px' }}>
+                      {briefingLoading ? <><Spinner /> Regenerating...</> : 'Regenerate'}
+                    </button>
+                  </div>
                   {['macro', 'fundamentals', 'tech', 'other'].map(cat => (
                     <div key={cat} className="news-briefing-item">
                       <span className="news-briefing-badge" style={{ background: CATEGORY_COLORS[cat] }}>{CATEGORY_LABELS[cat]}</span>
