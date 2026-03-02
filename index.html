@@ -331,7 +331,7 @@
 
     /* ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Price Alert List ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ */
     .alert-section { margin-bottom: 28px; animation: fadeUp .4s ease-out both; }
-    .alert-list { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+    .alert-list { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; overflow: visible; }
     .alert-row {
       display: grid; grid-template-columns: 100px 80px 1fr 90px;
       gap: 14px; padding: 12px 16px; background: var(--card);
@@ -345,16 +345,31 @@
     .alert-up { background: rgba(74,222,128,0.08); color: var(--success); }
     .alert-down { background: rgba(248,113,113,0.08); color: var(--danger); }
     .alert-news { color: var(--text-sec); font-family: 'Inter', sans-serif; }
-    .alert-category-select {
-      font-size: 11px; font-weight: 600; text-align: center; padding: 3px 6px;
-      border: 1.5px solid; border-radius: 6px; font-family: 'Inter', sans-serif;
-      background: transparent; cursor: pointer; appearance: none;
-      -webkit-appearance: none; -moz-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%239CA3AF' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
-      background-repeat: no-repeat; background-position: right 6px center;
-      padding-right: 18px;
+    .cat-picker { position: relative; display: inline-flex; justify-content: center; }
+    .cat-badge {
+      font-size: 11px; font-weight: 600; padding: 3px 10px; border: 1.5px solid;
+      border-radius: 6px; font-family: 'Inter', sans-serif; cursor: pointer;
+      transition: all 0.15s ease; user-select: none; white-space: nowrap;
     }
-    .alert-category-select:focus { outline: none; box-shadow: 0 0 0 2px rgba(96,165,250,0.3); }
+    .cat-badge:hover { filter: brightness(1.2); transform: scale(1.03); }
+    .cat-menu {
+      position: absolute; top: calc(100% + 6px); right: 0; z-index: 100;
+      min-width: 150px; padding: 4px; border-radius: 8px;
+      background: var(--card); border: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15);
+      animation: catMenuIn 0.12s ease-out;
+    }
+    @keyframes catMenuIn { from { opacity: 0; transform: translateY(-4px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .cat-option {
+      display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;
+      color: var(--text); font-family: 'Inter', sans-serif;
+      transition: background 0.1s ease;
+    }
+    .cat-option:hover { background: var(--bg-hover, rgba(255,255,255,0.06)); }
+    .cat-option.cat-active { background: var(--bg-hover, rgba(255,255,255,0.08)); }
+    .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .cat-check { width: 14px; text-align: center; font-size: 11px; color: var(--text-sec); margin-left: auto; }
     .news-briefing { margin-top: 14px; padding: 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
     .news-briefing-item { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; font-size: 13px; line-height: 1.6; }
     .news-briefing-item:last-child { margin-bottom: 0; }
@@ -2464,6 +2479,51 @@ function PriceAlertChart({ prices1y, significantDays }) {
 const CATEGORY_COLORS = { macro: '#60A5FA', fundamentals: '#4ADE80', tech: '#F87171', other: '#9CA3AF' };
 const CATEGORY_LABELS = { macro: 'Macro', fundamentals: 'Fundamentals', tech: 'Tech', other: 'Other' };
 
+const CAT_OPTIONS = [
+  { value: 'macro', label: 'Macro' },
+  { value: 'fundamentals', label: 'Fundamentals' },
+  { value: 'tech', label: 'Tech' },
+  { value: 'other', label: 'Other' },
+];
+
+function CategoryPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const color = CATEGORY_COLORS[value] || CATEGORY_COLORS.other;
+  const label = CATEGORY_LABELS[value] || 'Other';
+
+  return (
+    <div className="cat-picker" ref={ref}>
+      <span className="cat-badge" style={{ borderColor: color, color }} onClick={() => setOpen(!open)}>
+        {label}
+      </span>
+      {open && (
+        <div className="cat-menu">
+          {CAT_OPTIONS.map(opt => (
+            <div
+              key={opt.value}
+              className={`cat-option${opt.value === value ? ' cat-active' : ''}`}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+            >
+              <span className="cat-dot" style={{ background: CATEGORY_COLORS[opt.value] }} />
+              <span>{opt.label}</span>
+              <span className="cat-check">{opt.value === value ? '✓' : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubmit, stockInfo, apiKeys }) {
   const [open, setOpen] = useState(false);
   const [briefing, setBriefing] = useState(null);
@@ -2553,28 +2613,14 @@ function PriceAlertList({ alerts, loading, aiKeyValid, finnhubKey, onFinnhubSubm
                 <div className="alert-row" style={{ fontWeight: 600, background: 'var(--bg)' }}>
                   <span>Date</span><span style={{ textAlign: 'center' }}>Change</span><span>News Summary</span><span style={{ textAlign: 'center' }}>Category</span>
                 </div>
-                {alerts.map((a) => {
-                  const cat = getCategory(a);
-                  const color = CATEGORY_COLORS[cat] || CATEGORY_COLORS.other;
-                  return (
-                    <div key={getAlertKey(a)} className="alert-row">
-                      <span className="alert-date">{a.date}</span>
-                      <span className={`alert-change ${a.change >= 0 ? 'alert-up' : 'alert-down'}`}>{fmtPct(a.change)}</span>
-                      <span className="alert-news">{a.newsSummary || 'No news available'}</span>
-                      <select
-                        className="alert-category-select"
-                        style={{ borderColor: color, color }}
-                        value={cat}
-                        onChange={e => handleCatChange(a, e.target.value)}
-                      >
-                        <option value="macro">Macro</option>
-                        <option value="fundamentals">Fundamentals</option>
-                        <option value="tech">Tech</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
-                  );
-                })}
+                {alerts.map((a) => (
+                  <div key={getAlertKey(a)} className="alert-row">
+                    <span className="alert-date">{a.date}</span>
+                    <span className={`alert-change ${a.change >= 0 ? 'alert-up' : 'alert-down'}`}>{fmtPct(a.change)}</span>
+                    <span className="alert-news">{a.newsSummary || 'No news available'}</span>
+                    <CategoryPicker value={getCategory(a)} onChange={v => handleCatChange(a, v)} />
+                  </div>
+                ))}
               </div>
 
               {!briefing && !briefingLoading && (
@@ -2838,7 +2884,7 @@ function MetricsExplainer() {
 // ============================================================
 // SECTION 16: SUPPLEMENT CHARTS SECTION
 // ============================================================
-function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, wcSeries, expectedYears }) {
+function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, wcSeries, debtSeries, netCashSeries, netWorthSeries, expectedYears }) {
   const [open, setOpen] = useState(false);
   const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (evEbitda || []).length, (cashSeries || []).length);
   const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
@@ -2876,6 +2922,27 @@ function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, wcSeries
                 formatFn={v => '$' + fmtBigNum(v)}
               />
             )}
+            <HistoryChart
+              title={`${tag} Total Debt`}
+              series={debtSeries || []}
+              yLabel="Debt"
+              color="#FB923C"
+              formatFn={v => '$' + fmtBigNum(v)}
+            />
+            <HistoryChart
+              title={`${tag} Net Cash`}
+              series={netCashSeries || []}
+              yLabel="Net Cash"
+              color="#34D399"
+              formatFn={v => (v < 0 ? '-$' + fmtBigNum(Math.abs(v)) : '$' + fmtBigNum(v))}
+            />
+            <HistoryChart
+              title={`${tag} Assets - Debt`}
+              series={netWorthSeries || []}
+              yLabel="Net Worth"
+              color="#818CF8"
+              formatFn={v => (v < 0 ? '-$' + fmtBigNum(Math.abs(v)) : '$' + fmtBigNum(v))}
+            />
           </div>
         </div>
       )}
@@ -3130,6 +3197,39 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
       .slice(-5);
   }, [rawData]);
 
+  // Total Debt series (from balance sheet)
+  const debtSeries = useMemo(() => {
+    const balance = rawData.balance || [];
+    return balance.map(d => ({
+      year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null),
+      value: d.totalDebt
+    })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  }, [rawData]);
+
+  // Net Cash series (Cash - Debt)
+  const netCashSeries = useMemo(() => {
+    const balance = rawData.balance || [];
+    return balance.map(d => {
+      const y = d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null);
+      const cash = d.cashAndCashEquivalents;
+      const debt = d.totalDebt;
+      const nc = (cash != null && debt != null) ? cash - debt : null;
+      return { year: y, value: nc };
+    }).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  }, [rawData]);
+
+  // Net Worth series (Total Assets - Total Debt)
+  const netWorthSeries = useMemo(() => {
+    const balance = rawData.balance || [];
+    return balance.map(d => {
+      const y = d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null);
+      const ta = d.totalAssets;
+      const td = d.totalDebt;
+      const nw = (ta != null && td != null) ? ta - td : null;
+      return { year: y, value: nw };
+    }).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  }, [rawData]);
+
   // Price alert: calculate significant days
   const dailyChanges = useMemo(() => calcDailyChanges(prices1y), [prices1y]);
   const significantDays = useMemo(() => findSignificantChanges(dailyChanges), [dailyChanges]);
@@ -3295,7 +3395,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
             })()}
           </div>
 
-          <SupplementSection evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} cashSeries={cashSeries} wcSeries={wcSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementSection evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} cashSeries={cashSeries} wcSeries={wcSeries} debtSeries={debtSeries} netCashSeries={netCashSeries} netWorthSeries={netWorthSeries} expectedYears={checklist._meta?.expectedYears} />
 
           <DistributionSection geo={geo} seg={seg} />
 
