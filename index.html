@@ -2968,11 +2968,16 @@ function SupplementCashEquity({ debtSeries, totalAssetsSeries, netWorthSeries, e
 // ============================================================
 function FreeKeyModal({ onClose }) {
   const FREE_KEYS = [
-    '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',
-    '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',
+    'c2stb3ItdjEtZDE0ZWQyOTZlYWE0MTAxNDRhM2JmNzNhNGQzM2I0ODdiOTViNzE3M2ZjMThkZDc1NzJmNjJhZWZkYmE1ZDc0OQ==',
+    'c2stb3ItdjEtNDU3OTlmNjgzZDhkNGYzMjBmYTc4NzY4Mzg1ZDgyZDJmMjhlMWQ4OWNiMjAxMzM3Y2Q2ZGNiNWI4ZTJlYTZkMg==',
   ];
   const [copied, setCopied] = useState(null);
-  const [testState, setTestState] = useState({});
+  const [decoderInput, setDecoderInput] = useState('');
+  const [decodedKey, setDecodedKey] = useState('');
+  const [decodeError, setDecodeError] = useState('');
+  const [decodedCopied, setDecodedCopied] = useState(false);
+  const [testKey, setTestKey] = useState('');
+  const [testResult, setTestResult] = useState(null);
 
   function handleCopy(key, idx) {
     navigator.clipboard.writeText(key);
@@ -2980,29 +2985,101 @@ function FreeKeyModal({ onClose }) {
     setTimeout(() => setCopied(null), 1500);
   }
 
-  async function handleTest(key, idx) {
-    setTestState(prev => ({ ...prev, [idx]: 'testing' }));
+  function handleDecode() {
     try {
-      await callOpenRouter('Say "ok" in one word.', key, 10);
-      setTestState(prev => ({ ...prev, [idx]: { ok: true } }));
+      setDecodeError('');
+      const decoded = atob(decoderInput.trim());
+      setDecodedKey(decoded);
+      setTestKey(decoded);
     } catch (e) {
-      setTestState(prev => ({ ...prev, [idx]: { ok: false, msg: e.message } }));
+      setDecodeError('Invalid encoded string. Please copy the key above and paste here.');
+      setDecodedKey('');
+    }
+  }
+
+  function handleCopyDecoded() {
+    navigator.clipboard.writeText(decodedKey);
+    setDecodedCopied(true);
+    setTimeout(() => setDecodedCopied(false), 1500);
+  }
+
+  async function handleTestDecoded() {
+    if (!testKey) return;
+    setTestResult('testing');
+    try {
+      await callOpenRouter('Say "ok" in one word.', testKey, 10);
+      setTestResult({ ok: true });
+    } catch (e) {
+      setTestResult({ ok: false, msg: e.message });
     }
   }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 528 }}>
         <div className="modal-header">
           <h2>Free OpenRouter Keys</h2>
           <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.6 }}>
-            These are free OpenRouter API keys. Copy one, test its accessibility, then paste it into <strong style={{ color: 'var(--accent)' }}>API Keys → OpenRouter</strong> (top-right corner).
+            Copy the encoded key below, paste it into the <strong style={{ color: 'var(--accent)' }}>Decoder</strong> to reveal the real API key, then paste the decoded key into <strong style={{ color: 'var(--accent)' }}>API Keys \u2192 OpenRouter</strong> (top-right corner).
           </p>
         </div>
-        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {FREE_KEYS.map((key, idx) => (
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* --- Decoder --- */}
+          <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,.08), rgba(168,85,247,.08))', border: '1px solid rgba(99,102,241,.25)', borderRadius: 'var(--radius-sm)', padding: 16 }}>
+            <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Decoder</div>
+            <textarea
+              value={decoderInput}
+              onChange={e => { setDecoderInput(e.target.value); setDecodeError(''); }}
+              placeholder="Paste encoded key here..."
+              rows={2}
+              style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--text)', resize: 'none', outline: 'none' }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+              <button className="btn btn-primary btn-sm" onClick={handleDecode} disabled={!decoderInput.trim()}>Decode</button>
+              {decodedKey && (
+                <button className="btn btn-outline btn-sm" onClick={handleCopyDecoded}>
+                  {decodedCopied ? '\u2713 Copied' : 'Copy Decoded Key'}
+                </button>
+              )}
+            </div>
+            {decodeError && <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 8 }}>{decodeError}</div>}
+            {decodedKey && (
+              <div style={{ marginTop: 10, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase' }}>Decoded Result</div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--success)', wordBreak: 'break-all', lineHeight: 1.5, userSelect: 'all' }}>
+                  {decodedKey}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* --- Tester --- */}
+          <div style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 14 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Key Tester</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                className="input"
+                value={testKey}
+                onChange={e => { setTestKey(e.target.value); setTestResult(null); }}
+                placeholder="Decoded key auto-fills here or paste manually"
+                style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}
+              />
+              <button className="btn btn-outline btn-sm" disabled={!testKey || testResult === 'testing'} onClick={handleTestDecoded} style={{ whiteSpace: 'nowrap' }}>
+                {testResult === 'testing' ? 'Testing...' : 'Test'}
+              </button>
+            </div>
+            {testResult && testResult !== 'testing' && (
+              <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: testResult.ok ? 'var(--success)' : 'var(--danger)' }}>
+                {testResult.ok ? '\u2713 Key is accessible and working!' : '\u2717 ' + testResult.msg}
+              </div>
+            )}
+          </div>
+
+          {/* --- Encoded Keys --- */}
+          {FREE_KEYS.map((key, idx) => key && (
             <div key={idx} style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 14 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600 }}>Key {idx + 1}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600 }}>Encoded Key {idx + 1}</div>
               <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--text-sec)', wordBreak: 'break-all', lineHeight: 1.5, marginBottom: 10, userSelect: 'all' }}>
                 {key}
               </div>
@@ -3010,20 +3087,18 @@ function FreeKeyModal({ onClose }) {
                 <button className="btn btn-outline btn-sm" onClick={() => handleCopy(key, idx)}>
                   {copied === idx ? '\u2713 Copied' : 'Copy'}
                 </button>
-                <button className="btn btn-outline btn-sm" disabled={testState[idx] === 'testing'} onClick={() => handleTest(key, idx)}>
-                  {testState[idx] === 'testing' ? 'Testing...' : 'Test'}
-                </button>
-                {testState[idx] && testState[idx] !== 'testing' && (
-                  <span style={{ fontSize: 11, fontWeight: 600, color: testState[idx].ok ? 'var(--success)' : 'var(--danger)' }}>
-                    {testState[idx].ok ? '\u2713 Accessible' : '\u2717 ' + testState[idx].msg}
-                  </span>
-                )}
               </div>
             </div>
           ))}
+          {FREE_KEYS.every(k => !k) && (
+            <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13, padding: 20 }}>
+              No keys available yet. Keys will be added soon.
+            </div>
+          )}
         </div>
-        <div className="modal-footer">
-          <button className="btn btn-primary" onClick={onClose}>Done</button>
+        <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+          <div />
+          <button className="btn btn-sm" onClick={onClose} style={{ background: '#22C55E', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 20px', fontWeight: 600, cursor: 'pointer' }}>Exit</button>
         </div>
       </div>
     </div>
@@ -3054,19 +3129,20 @@ function FreeKeyButton() {
       {showPin && (
         <div className="modal-overlay" onClick={() => { setShowPin(false); setPin(''); setPinError(false); }}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
-            <div className="modal-header">
-              <h2>Enter PIN</h2>
+            <div className="modal-header" style={{ textAlign: 'center' }}>
+              <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5 }}>Enter PIN</h2>
+              <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>Enter your access code to unlock free keys</p>
             </div>
             <form onSubmit={handlePinSubmit}>
               <div className="modal-body">
                 <input
                   className="input"
                   type="password"
-                  placeholder="Enter PIN number"
+                  placeholder="\u2022 \u2022 \u2022 \u2022 \u2022 \u2022"
                   value={pin}
                   onChange={e => { setPin(e.target.value); setPinError(false); }}
                   autoFocus
-                  style={{ textAlign: 'center', fontSize: 18, letterSpacing: 6 }}
+                  style={{ textAlign: 'center', fontSize: 24, letterSpacing: 10, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, padding: '14px 16px', background: 'var(--bg-raised)', border: '2px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
                 />
                 {pinError && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 8, textAlign: 'center' }}>Incorrect PIN. Try again.</div>}
               </div>
