@@ -3015,7 +3015,7 @@ function FreeKeyModal({ onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={onClose} style={{ alignItems: 'flex-end', paddingBottom: '10vh' }}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 528 }}>
         <div className="modal-header">
           <h2>Free OpenRouter Keys</h2>
@@ -3138,7 +3138,7 @@ function FreeKeyButton() {
                 <input
                   className="input"
                   type="password"
-                  placeholder="\u2022 \u2022 \u2022 \u2022 \u2022 \u2022"
+                  placeholder="PIN"
                   value={pin}
                   onChange={e => { setPin(e.target.value); setPinError(false); }}
                   autoFocus
