@@ -2882,23 +2882,22 @@ function MetricsExplainer() {
 }
 
 // ============================================================
-// SECTION 16: SUPPLEMENT CHARTS SECTION
+// SECTION 16: SUPPLEMENT CHARTS SECTIONS
 // ============================================================
-function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, wcSeries, debtSeries, netCashSeries, netWorthSeries, expectedYears }) {
+function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, expectedYears }) {
   const [open, setOpen] = useState(false);
-  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (evEbitda || []).length, (cashSeries || []).length);
+  const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (evEbitda || []).length);
   const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
   return (
     <div className="supplement">
       <button className="supplement-toggle" onClick={() => setOpen(!open)}>
         <span>{open ? '\u25BC' : '\u25B6'}</span>
-        <span>Supplemental Charts</span>
+        <span>Supplement Charts — Valuation & Profitability</span>
       </button>
       {open && (
         <div className="supplement-body">
           <div className="charts-grid">
             <HistoryChart title={`${tag} EPS`} series={epsSeries || []} yLabel="EPS" color="#F472B6" formatFn={v => '$' + fmtNum(v, 2)} />
-            <HistoryChart title={`${tag} PS Ratio`} series={psSeries || []} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
             <HistoryChart
               title={`${tag} EV / EBITDA`}
               series={(evEbitda || []).map(d => ({ year: d.year, value: d.ratio }))}
@@ -2906,13 +2905,7 @@ function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, wcSeries
               color="#7c3aed"
               formatFn={v => v != null ? fmtNum(v, 1) + 'x' : '-'}
             />
-            <HistoryChart
-              title={`${tag} Cash & Equivalents`}
-              series={cashSeries || []}
-              yLabel="Cash"
-              color="#22D3EE"
-              formatFn={v => '$' + fmtBigNum(v)}
-            />
+            <HistoryChart title={`${tag} PS Ratio`} series={psSeries || []} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
             {(wcSeries || []).length > 0 && (
               <HistoryChart
                 title={`${(wcSeries || []).length}Y Working Capital`}
@@ -2922,6 +2915,26 @@ function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, wcSeries
                 formatFn={v => '$' + fmtBigNum(v)}
               />
             )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SupplementCashEquity({ debtSeries, totalAssetsSeries, netWorthSeries, expectedYears }) {
+  const [open, setOpen] = useState(false);
+  const yrs = expectedYears || Math.max((debtSeries || []).length, (totalAssetsSeries || []).length, (netWorthSeries || []).length);
+  const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
+  return (
+    <div className="supplement">
+      <button className="supplement-toggle" onClick={() => setOpen(!open)}>
+        <span>{open ? '\u25BC' : '\u25B6'}</span>
+        <span>Supplement Charts — Cash & Equity</span>
+      </button>
+      {open && (
+        <div className="supplement-body">
+          <div className="charts-grid">
             <HistoryChart
               title={`${tag} Total Debt`}
               series={debtSeries || []}
@@ -2930,11 +2943,11 @@ function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, wcSeries
               formatFn={v => '$' + fmtBigNum(v)}
             />
             <HistoryChart
-              title={`${tag} Net Cash`}
-              series={netCashSeries || []}
-              yLabel="Net Cash"
+              title={`${tag} Total Assets`}
+              series={totalAssetsSeries || []}
+              yLabel="Assets"
               color="#34D399"
-              formatFn={v => (v < 0 ? '-$' + fmtBigNum(Math.abs(v)) : '$' + fmtBigNum(v))}
+              formatFn={v => '$' + fmtBigNum(v)}
             />
             <HistoryChart
               title={`${tag} Assets - Debt`}
@@ -2953,6 +2966,123 @@ function SupplementSection({ evEbitda, epsSeries, psSeries, cashSeries, wcSeries
 // ============================================================
 // SECTION 17: DASHBOARD PAGE
 // ============================================================
+function FreeKeyModal({ onClose }) {
+  const FREE_KEYS = [
+    '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',
+    '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',
+  ];
+  const [copied, setCopied] = useState(null);
+  const [testState, setTestState] = useState({});
+
+  function handleCopy(key, idx) {
+    navigator.clipboard.writeText(key);
+    setCopied(idx);
+    setTimeout(() => setCopied(null), 1500);
+  }
+
+  async function handleTest(key, idx) {
+    setTestState(prev => ({ ...prev, [idx]: 'testing' }));
+    try {
+      await callOpenRouter('Say "ok" in one word.', key, 10);
+      setTestState(prev => ({ ...prev, [idx]: { ok: true } }));
+    } catch (e) {
+      setTestState(prev => ({ ...prev, [idx]: { ok: false, msg: e.message } }));
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Free OpenRouter Keys</h2>
+          <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.6 }}>
+            These are free OpenRouter API keys. Copy one, test its accessibility, then paste it into <strong style={{ color: 'var(--accent)' }}>API Keys → OpenRouter</strong> (top-right corner).
+          </p>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {FREE_KEYS.map((key, idx) => (
+            <div key={idx} style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 14 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600 }}>Key {idx + 1}</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--text-sec)', wordBreak: 'break-all', lineHeight: 1.5, marginBottom: 10, userSelect: 'all' }}>
+                {key}
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button className="btn btn-outline btn-sm" onClick={() => handleCopy(key, idx)}>
+                  {copied === idx ? '\u2713 Copied' : 'Copy'}
+                </button>
+                <button className="btn btn-outline btn-sm" disabled={testState[idx] === 'testing'} onClick={() => handleTest(key, idx)}>
+                  {testState[idx] === 'testing' ? 'Testing...' : 'Test'}
+                </button>
+                {testState[idx] && testState[idx] !== 'testing' && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: testState[idx].ok ? 'var(--success)' : 'var(--danger)' }}>
+                    {testState[idx].ok ? '\u2713 Accessible' : '\u2717 ' + testState[idx].msg}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FreeKeyButton() {
+  const [showPin, setShowPin] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState(false);
+
+  function handlePinSubmit(e) {
+    e.preventDefault();
+    if (pin === '080523') {
+      setShowPin(false);
+      setShowKeys(true);
+      setPin('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+    }
+  }
+
+  return (
+    <>
+      <button className="btn btn-outline btn-sm" onClick={() => setShowPin(true)} style={{ color: '#FBBF24', borderColor: '#FBBF24' }}>Free Key</button>
+      {showPin && (
+        <div className="modal-overlay" onClick={() => { setShowPin(false); setPin(''); setPinError(false); }}>
+          <div className="modal modal-sm" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
+            <div className="modal-header">
+              <h2>Enter PIN</h2>
+            </div>
+            <form onSubmit={handlePinSubmit}>
+              <div className="modal-body">
+                <input
+                  className="input"
+                  type="password"
+                  placeholder="Enter PIN number"
+                  value={pin}
+                  onChange={e => { setPin(e.target.value); setPinError(false); }}
+                  autoFocus
+                  style={{ textAlign: 'center', fontSize: 18, letterSpacing: 6 }}
+                />
+                {pinError && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 8, textAlign: 'center' }}>Incorrect PIN. Try again.</div>}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => { setShowPin(false); setPin(''); setPinError(false); }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={!pin}>Unlock</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {showKeys && <FreeKeyModal onClose={() => setShowKeys(false)} />}
+    </>
+  );
+}
+
 function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpenKeys, proMode, setProMode }) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [proReaction, setProReaction] = useState('');
@@ -2999,6 +3129,9 @@ function DashboardPage({ apiKeys, watchlist, setWatchlist, onSelectStock, onOpen
       )}
       <header className="header">
         <div className="container header-inner">
+          <div style={{ position: 'absolute', left: 0 }}>
+            <FreeKeyButton />
+          </div>
           <span className="header-title">Stock Analyzer</span>
           <div className="header-actions">
             <button className="btn btn-outline btn-sm" onClick={() => setShowClearConfirm(true)} style={{ color: '#e74c3c', borderColor: '#e74c3c' }}>Clear Storage</button>
@@ -3174,15 +3307,6 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     return mergeHistoryInputs(checklist.ocf15?.data || [], 'ocf15', v => v * 1e9);
   }, [checklist, userInputs]);
 
-  // Cash & Cash Equivalents series (from balance sheet)
-  const cashSeries = useMemo(() => {
-    const balance = rawData.balance || [];
-    return balance.map(d => ({
-      year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null),
-      value: d.cashAndCashEquivalents
-    })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
-  }, [rawData]);
-
   // Working Capital series (from balance sheet, last 5 years)
   const wcSeries = useMemo(() => {
     const balance = rawData.balance || [];
@@ -3206,16 +3330,13 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
   }, [rawData]);
 
-  // Net Cash series (Cash - Debt)
-  const netCashSeries = useMemo(() => {
+  // Total Assets series (from balance sheet)
+  const totalAssetsSeries = useMemo(() => {
     const balance = rawData.balance || [];
-    return balance.map(d => {
-      const y = d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null);
-      const cash = d.cashAndCashEquivalents;
-      const debt = d.totalDebt;
-      const nc = (cash != null && debt != null) ? cash - debt : null;
-      return { year: y, value: nc };
-    }).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+    return balance.map(d => ({
+      year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null),
+      value: d.totalAssets
+    })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
   }, [rawData]);
 
   // Net Worth series (Total Assets - Total Debt)
@@ -3395,7 +3516,8 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
             })()}
           </div>
 
-          <SupplementSection evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} cashSeries={cashSeries} wcSeries={wcSeries} debtSeries={debtSeries} netCashSeries={netCashSeries} netWorthSeries={netWorthSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementValuation evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} wcSeries={wcSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementCashEquity debtSeries={debtSeries} totalAssetsSeries={totalAssetsSeries} netWorthSeries={netWorthSeries} expectedYears={checklist._meta?.expectedYears} />
 
           <DistributionSection geo={geo} seg={seg} />
 
