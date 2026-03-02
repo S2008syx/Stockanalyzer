@@ -3015,7 +3015,7 @@ function FreeKeyModal({ onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ alignItems: 'flex-end', paddingBottom: '10vh' }}>
+    <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 528 }}>
         <div className="modal-header">
           <h2>Free OpenRouter Keys</h2>
@@ -3126,9 +3126,9 @@ function FreeKeyButton() {
   return (
     <>
       <button className="btn btn-outline btn-sm" onClick={() => setShowPin(true)} style={{ color: '#FBBF24', borderColor: '#FBBF24' }}>Free Key</button>
-      {showPin && (
-        <div className="modal-overlay" onClick={() => { setShowPin(false); setPin(''); setPinError(false); }}>
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
+      {showPin && ReactDOM.createPortal(
+        <div className="modal-overlay" onClick={() => { setShowPin(false); setPin(''); setPinError(false); }} style={{ alignItems: 'flex-start', paddingTop: '18vh' }}>
+          <div className="modal modal-sm" onClick={e => e.stopPropagation()} style={{ maxWidth: 324, transform: 'scale(0.9)' }}>
             <div className="modal-header" style={{ textAlign: 'center' }}>
               <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5 }}>Enter PIN</h2>
               <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>Enter your access code to unlock free keys</p>
@@ -3152,9 +3152,13 @@ function FreeKeyButton() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-      {showKeys && <FreeKeyModal onClose={() => setShowKeys(false)} />}
+      {showKeys && ReactDOM.createPortal(
+        <FreeKeyModal onClose={() => setShowKeys(false)} />,
+        document.body
+      )}
     </>
   );
 }
