@@ -640,22 +640,24 @@ async function fetchHistoricalPrices(ticker, key) {
   return Array.isArray(d) ? d : (d && d.historical ? d.historical : []);
 }
 
-async function fetchCommodityYearly(symbol, key) {
+async function fetchCommodityQuarterly(symbol, key) {
   const to = new Date().toISOString().slice(0, 10);
-  const fromYear = CURRENT_YEAR - DATA_YEARS;
+  const fromYear = CURRENT_YEAR - 5;
   const from = `${fromYear}-01-01`;
-  // Use standard FMP stable API with ETF symbol (e.g. USO) instead of commodity codes
   const d = await fmpGet(`/historical-price-eod/full?symbol=${symbol}&from=${from}&to=${to}`, key);
   const prices = Array.isArray(d) ? d : (d && d.historical ? d.historical : []);
-  const byYear = {};
+  const byQ = {};
   prices.forEach(p => {
-    const y = p.date ? p.date.slice(0, 4) : null;
-    if (!y) return;
-    if (!byYear[y]) byYear[y] = { sum: 0, count: 0 };
-    byYear[y].sum += p.close;
-    byYear[y].count++;
+    if (!p.date) return;
+    const y = p.date.slice(0, 4);
+    const m = parseInt(p.date.slice(5, 7), 10);
+    const q = m <= 3 ? 'Q1' : m <= 6 ? 'Q2' : m <= 9 ? 'Q3' : 'Q4';
+    const label = `${y} ${q}`;
+    if (!byQ[label]) byQ[label] = { sum: 0, count: 0 };
+    byQ[label].sum += p.close;
+    byQ[label].count++;
   });
-  return Object.entries(byYear)
+  return Object.entries(byQ)
     .map(([year, v]) => ({ year, value: Number((v.sum / v.count).toFixed(2)) }))
     .sort((a, b) => a.year.localeCompare(b.year));
 }
@@ -3085,7 +3087,7 @@ function MacroIndexSection({ fmpKey }) {
     if (!open || fetched.current || !fmpKey) return;
     fetched.current = true;
     setLoading(true);
-    fetchCommodityYearly('USO', fmpKey)
+    fetchCommodityQuarterly('USO', fmpKey)
       .then(data => { setOilSeries(data); setError(null); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -3104,7 +3106,7 @@ function MacroIndexSection({ fmpKey }) {
           {oilSeries && (
             <div className="charts-grid">
               <HistoryChart
-                title="15Y Crude Oil ETF (USO)"
+                title="5Y Crude Oil ETF (USO)"
                 series={oilSeries}
                 yLabel="$/barrel"
                 color="#FB923C"
