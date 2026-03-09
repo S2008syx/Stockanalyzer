@@ -640,6 +640,25 @@ async function fetchHistoricalPrices(ticker, key) {
   return Array.isArray(d) ? d : (d && d.historical ? d.historical : []);
 }
 
+async function fetchCommodityYearly(symbol, key) {
+  const to = new Date().toISOString().slice(0, 10);
+  const fromYear = CURRENT_YEAR - DATA_YEARS;
+  const from = `${fromYear}-01-01`;
+  const d = await fmpGet(`/historical-price-eod/full?symbol=${symbol}&from=${from}&to=${to}`, key);
+  const prices = Array.isArray(d) ? d : (d && d.historical ? d.historical : []);
+  const byYear = {};
+  prices.forEach(p => {
+    const y = p.date ? p.date.slice(0, 4) : null;
+    if (!y) return;
+    if (!byYear[y]) byYear[y] = { sum: 0, count: 0 };
+    byYear[y].sum += p.close;
+    byYear[y].count++;
+  });
+  return Object.entries(byYear)
+    .map(([year, v]) => ({ year, value: Number((v.sum / v.count).toFixed(2)) }))
+    .sort((a, b) => a.year.localeCompare(b.year));
+}
+
 async function fetchFmpNews(ticker, key, limit = 50) {
   return fmpGet(`/news/stock?symbols=${ticker}&limit=${limit}`, key);
 }
@@ -1261,6 +1280,15 @@ function buildChecklist(rawData) {
     year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null), value: d.operatingCashFlow
   })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
   status.ocf15 = buildHistoryStatus(ocfYears, yearList);
+
+  const profitMarginYears = income.map(d => {
+    const year = d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null);
+    const rev = d.revenue;
+    const ni = d.netIncome;
+    if (!year || !rev || rev === 0 || ni == null) return null;
+    return { year, value: Number(((ni / rev) * 100).toFixed(2)) };
+  }).filter(Boolean).sort((a, b) => a.year.localeCompare(b.year));
+  status.profitMargin15 = buildHistoryStatus(profitMarginYears, yearList);
 
   status.price = { available: profile && profile.price ? 1 : 0, total: 1, data: profile ? profile.price : null };
   const eps = profile ? (profile.eps || null) : null;
@@ -2425,7 +2453,7 @@ function AiInsightsPanel({ insights, loading, error, aiKeyValid, apiKeys, onKeyS
 // ============================================================
 // SECTION 11: HISTORICAL LINE CHART (reusable)
 // ============================================================
-function HistoryChart({ title, series, yLabel, color, formatFn }) {
+function HistoryChart({ title, series, yLabel, color, formatFn, chartType }) {
   if (!series || series.length === 0) {
     return (
       <div className="chart-card">
@@ -2434,19 +2462,24 @@ function HistoryChart({ title, series, yLabel, color, formatFn }) {
       </div>
     );
   }
+  const isBar = chartType === 'bar';
   const data = {
     labels: series.map(s => s.year),
     datasets: [{
       label: yLabel || title,
       data: series.map(s => s.value),
-      borderColor: color || CHART_COLORS[0],
-      backgroundColor: (color || CHART_COLORS[0]) + '20',
-      fill: true,
-      tension: 0.3,
-      pointRadius: series.map(s => s.neg ? 5 : 3),
-      pointHoverRadius: series.map(s => s.neg ? 7 : 5),
-      pointBackgroundColor: series.map(s => s.neg ? '#F87171' : (color || CHART_COLORS[0])),
-      pointBorderColor: series.map(s => s.neg ? '#F87171' : (color || CHART_COLORS[0])),
+      borderColor: isBar ? undefined : (color || CHART_COLORS[0]),
+      backgroundColor: isBar
+        ? series.map(s => s.value >= 0 ? (color || CHART_COLORS[0]) + '80' : '#F8717180')
+        : (color || CHART_COLORS[0]) + '20',
+      borderWidth: isBar ? 0 : undefined,
+      borderRadius: isBar ? 4 : undefined,
+      fill: !isBar,
+      tension: isBar ? undefined : 0.3,
+      pointRadius: isBar ? undefined : series.map(s => s.neg ? 5 : 3),
+      pointHoverRadius: isBar ? undefined : series.map(s => s.neg ? 7 : 5),
+      pointBackgroundColor: isBar ? undefined : series.map(s => s.neg ? '#F87171' : (color || CHART_COLORS[0])),
+      pointBorderColor: isBar ? undefined : series.map(s => s.neg ? '#F87171' : (color || CHART_COLORS[0])),
     }],
   };
   const options = {
@@ -2472,7 +2505,7 @@ function HistoryChart({ title, series, yLabel, color, formatFn }) {
   return (
     <div className="chart-card">
       <h4>{title}</h4>
-      <ChartWrap type="line" data={data} options={options} />
+      <ChartWrap type={isBar ? 'bar' : 'line'} data={data} options={options} />
     </div>
   );
 }
@@ -2957,7 +2990,7 @@ function MetricsExplainer() {
 // ============================================================
 // SECTION 16: SUPPLEMENT CHARTS SECTIONS
 // ============================================================
-function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, expectedYears }) {
+function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, profitMarginSeries, expectedYears }) {
   const [open, setOpen] = useState(false);
   const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (evEbitda || []).length);
   const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
@@ -2970,6 +3003,7 @@ function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, expected
       {open && (
         <div className="supplement-body">
           <div className="charts-grid">
+            <HistoryChart title={`${tag} Net Profit Margin`} series={profitMarginSeries || []} yLabel="Margin %" color="#FBBF24" formatFn={v => fmtNum(v, 2) + '%'} />
             <HistoryChart title={`${tag} EPS`} series={epsSeries || []} yLabel="EPS" color="#F472B6" formatFn={v => '$' + fmtNum(v, 2)} />
             <HistoryChart
               title={`${tag} EV / EBITDA`}
@@ -3030,6 +3064,53 @@ function SupplementCashEquity({ debtSeries, totalAssetsSeries, netWorthSeries, e
               formatFn={v => (v < 0 ? '-$' + fmtBigNum(Math.abs(v)) : '$' + fmtBigNum(v))}
             />
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// SECTION 16C: MACRO INDEX SECTION
+// ============================================================
+function MacroIndexSection({ fmpKey }) {
+  const [open, setOpen] = useState(false);
+  const [oilSeries, setOilSeries] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const fetched = useRef(false);
+
+  useEffect(() => {
+    if (!open || fetched.current || !fmpKey) return;
+    fetched.current = true;
+    setLoading(true);
+    fetchCommodityYearly('CLUSD', fmpKey)
+      .then(data => { setOilSeries(data); setError(null); })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [open, fmpKey]);
+
+  return (
+    <div className="supplement">
+      <button className="supplement-toggle" onClick={() => setOpen(!open)}>
+        <span>{open ? '\u25BC' : '\u25B6'}</span>
+        <span>Macro Index</span>
+      </button>
+      {open && (
+        <div className="supplement-body">
+          {loading && <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-dim)' }}><Spinner /> Loading macro data...</div>}
+          {error && <div style={{ textAlign: 'center', padding: 24, color: 'var(--danger)' }}>Error: {error}</div>}
+          {oilSeries && (
+            <div className="charts-grid">
+              <HistoryChart
+                title="15Y Crude Oil Price (WTI)"
+                series={oilSeries}
+                yLabel="$/barrel"
+                color="#FB923C"
+                formatFn={v => '$' + fmtNum(v, 2)}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -3460,6 +3541,11 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     return mergeHistoryInputs(checklist.ocf15?.data || [], 'ocf15', v => v * 1e9);
   }, [checklist, userInputs]);
 
+  // Profit Margin series
+  const profitMarginSeries = useMemo(() => {
+    return checklist.profitMargin15?.data || [];
+  }, [checklist]);
+
   // Working Capital series (from balance sheet, last 5 years)
   const wcSeries = useMemo(() => {
     const balance = rawData.balance || [];
@@ -3661,16 +3747,18 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
               return <>
                 <HistoryChart title={`${tag} PE Ratio`} series={peSeries} yLabel="PE" color="#4ADE80" formatFn={v => safePE(v).toString()} />
                 <HistoryChart title={`${tag} Market Cap`} series={mktcapSeries} yLabel="Mkt Cap" color="#FB923C" formatFn={v => '$' + fmtBigNum(v)} />
-                <HistoryChart title={`${tag} Free Cash Flow`} series={fcfSeries} yLabel="FCF" color="#22D3EE" formatFn={v => '$' + fmtBigNum(v)} />
+                <HistoryChart title={`${tag} Free Cash Flow`} series={fcfSeries} yLabel="FCF" color="#22D3EE" formatFn={v => '$' + fmtBigNum(v)} chartType="bar" />
                 <HistoryChart title={`${tag} EBITDA`} series={ebitdaSeries} yLabel="EBITDA" color="#60A5FA" formatFn={v => '$' + fmtBigNum(v)} />
-                <HistoryChart title={`${tag} Operating Cash Flow`} series={ocfSeries} yLabel="OCF" color="#34D399" formatFn={v => '$' + fmtBigNum(v)} />
+                <HistoryChart title={`${tag} Operating Cash Flow`} series={ocfSeries} yLabel="OCF" color="#34D399" formatFn={v => '$' + fmtBigNum(v)} chartType="bar" />
                 <PriceAlertChart prices1y={prices1y} significantDays={significantDays} />
               </>;
             })()}
           </div>
 
-          <SupplementValuation evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} wcSeries={wcSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementValuation evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} wcSeries={wcSeries} profitMarginSeries={profitMarginSeries} expectedYears={checklist._meta?.expectedYears} />
           <SupplementCashEquity debtSeries={debtSeries} totalAssetsSeries={totalAssetsSeries} netWorthSeries={netWorthSeries} expectedYears={checklist._meta?.expectedYears} />
+
+          <MacroIndexSection fmpKey={localApiKeys.fmp} />
 
           <DistributionSection geo={geo} seg={seg} />
 
