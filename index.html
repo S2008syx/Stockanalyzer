@@ -662,6 +662,36 @@ async function fetchCommodityQuarterly(symbol, key) {
     .sort((a, b) => a.year.localeCompare(b.year));
 }
 
+async function fetchCPI(key, years) {
+  const d = await fmpGet(`/economic-indicators?name=CPI`, key);
+  const arr = Array.isArray(d) ? d : [];
+  const cutoff = CURRENT_YEAR - years;
+  return arr
+    .filter(r => r.date && parseInt(r.date.slice(0, 4), 10) >= cutoff)
+    .map(r => ({ year: r.date.slice(0, 7), value: r.value }))
+    .sort((a, b) => a.year.localeCompare(b.year));
+}
+
+async function fetchCPIQuarterly(key, years) {
+  const d = await fmpGet(`/economic-indicators?name=CPI`, key);
+  const arr = Array.isArray(d) ? d : [];
+  const cutoff = CURRENT_YEAR - years;
+  const byQ = {};
+  arr.filter(r => r.date && parseInt(r.date.slice(0, 4), 10) >= cutoff)
+    .forEach(r => {
+      const y = r.date.slice(0, 4);
+      const m = parseInt(r.date.slice(5, 7), 10);
+      const q = m <= 3 ? 'Q1' : m <= 6 ? 'Q2' : m <= 9 ? 'Q3' : 'Q4';
+      const label = `${y} ${q}`;
+      if (!byQ[label]) byQ[label] = { sum: 0, count: 0 };
+      byQ[label].sum += r.value;
+      byQ[label].count++;
+    });
+  return Object.entries(byQ)
+    .map(([year, v]) => ({ year, value: Number((v.sum / v.count).toFixed(2)) }))
+    .sort((a, b) => a.year.localeCompare(b.year));
+}
+
 async function fetchFmpNews(ticker, key, limit = 50) {
   return fmpGet(`/news/stock?symbols=${ticker}&limit=${limit}`, key);
 }
@@ -3032,9 +3062,9 @@ function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, profitMa
   );
 }
 
-function SupplementCashEquity({ debtSeries, totalAssetsSeries, netWorthSeries, expectedYears }) {
+function SupplementCashEquity({ debtSeries, totalAssetsSeries, netWorthSeries, cashLiquiditySeries, expectedYears }) {
   const [open, setOpen] = useState(false);
-  const yrs = expectedYears || Math.max((debtSeries || []).length, (totalAssetsSeries || []).length, (netWorthSeries || []).length);
+  const yrs = expectedYears || Math.max((debtSeries || []).length, (totalAssetsSeries || []).length, (netWorthSeries || []).length, (cashLiquiditySeries || []).length);
   const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
   return (
     <div className="supplement">
@@ -3066,6 +3096,13 @@ function SupplementCashEquity({ debtSeries, totalAssetsSeries, netWorthSeries, e
               color="#818CF8"
               formatFn={v => (v < 0 ? '-$' + fmtBigNum(Math.abs(v)) : '$' + fmtBigNum(v))}
             />
+            <HistoryChart
+              title={`${tag} Net Cash Liquidity`}
+              series={cashLiquiditySeries || []}
+              yLabel="Cash"
+              color="#38BDF8"
+              formatFn={v => '$' + fmtBigNum(v)}
+            />
           </div>
         </div>
       )}
@@ -3079,6 +3116,8 @@ function SupplementCashEquity({ debtSeries, totalAssetsSeries, netWorthSeries, e
 function MacroIndexSection({ fmpKey }) {
   const [open, setOpen] = useState(false);
   const [oilSeries, setOilSeries] = useState(null);
+  const [cpi15y, setCpi15y] = useState(null);
+  const [cpi5y20q, setCpi5y20q] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const fetched = useRef(false);
@@ -3087,8 +3126,17 @@ function MacroIndexSection({ fmpKey }) {
     if (!open || fetched.current || !fmpKey) return;
     fetched.current = true;
     setLoading(true);
-    fetchCommodityQuarterly('USO', fmpKey)
-      .then(data => { setOilSeries(data); setError(null); })
+    Promise.all([
+      fetchCommodityQuarterly('USO', fmpKey),
+      fetchCPI(fmpKey, 15),
+      fetchCPIQuarterly(fmpKey, 5),
+    ])
+      .then(([oil, cpi15, cpi5q]) => {
+        setOilSeries(oil);
+        setCpi15y(cpi15);
+        setCpi5y20q(cpi5q);
+        setError(null);
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [open, fmpKey]);
@@ -3103,14 +3151,28 @@ function MacroIndexSection({ fmpKey }) {
         <div className="supplement-body">
           {loading && <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-dim)' }}><Spinner /> Loading macro data...</div>}
           {error && <div style={{ textAlign: 'center', padding: 24, color: 'var(--danger)' }}>Error: {error}</div>}
-          {oilSeries && (
+          {(oilSeries || cpi15y || cpi5y20q) && (
             <div className="charts-grid">
               <HistoryChart
                 title="5Y Crude Oil ETF (USO)"
-                series={oilSeries}
+                series={oilSeries || []}
                 yLabel="$/barrel"
                 color="#FB923C"
                 formatFn={v => '$' + fmtNum(v, 2)}
+              />
+              <HistoryChart
+                title="15Y CPI (Consumer Price Index)"
+                series={cpi15y || []}
+                yLabel="CPI"
+                color="#60A5FA"
+                formatFn={v => fmtNum(v, 1)}
+              />
+              <HistoryChart
+                title="5Y CPI Quarterly (20 Seasons)"
+                series={cpi5y20q || []}
+                yLabel="CPI"
+                color="#34D399"
+                formatFn={v => fmtNum(v, 1)}
               />
             </div>
           )}
@@ -3593,6 +3655,16 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     }).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
   }, [rawData]);
 
+  // Net Cash Liquidity series (Cash & Equivalents + Short-term Investments)
+  const cashLiquiditySeries = useMemo(() => {
+    const balance = rawData.balance || [];
+    return balance.map(d => {
+      const y = d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null);
+      const cash = (d.cashAndCashEquivalents || 0) + (d.shortTermInvestments || 0);
+      return { year: y, value: cash || null };
+    }).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  }, [rawData]);
+
   // Price alert: calculate significant days
   const dailyChanges = useMemo(() => calcDailyChanges(prices1y), [prices1y]);
   const significantDays = useMemo(() => findSignificantChanges(dailyChanges), [dailyChanges]);
@@ -3759,7 +3831,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
           </div>
 
           <SupplementValuation evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} wcSeries={wcSeries} profitMarginSeries={profitMarginSeries} expectedYears={checklist._meta?.expectedYears} />
-          <SupplementCashEquity debtSeries={debtSeries} totalAssetsSeries={totalAssetsSeries} netWorthSeries={netWorthSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementCashEquity debtSeries={debtSeries} totalAssetsSeries={totalAssetsSeries} netWorthSeries={netWorthSeries} cashLiquiditySeries={cashLiquiditySeries} expectedYears={checklist._meta?.expectedYears} />
 
           <MacroIndexSection fmpKey={localApiKeys.fmp} />
 
