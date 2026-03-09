@@ -644,12 +644,9 @@ async function fetchCommodityYearly(symbol, key) {
   const to = new Date().toISOString().slice(0, 10);
   const fromYear = CURRENT_YEAR - DATA_YEARS;
   const from = `${fromYear}-01-01`;
-  // Use FMP v3 API for commodities (stable API returns 402 for commodity symbols)
-  const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${symbol}?from=${from}&to=${to}&apikey=${key}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`Commodity API error: ${r.status}`);
-  const d = await r.json();
-  const prices = d && d.historical ? d.historical : (Array.isArray(d) ? d : []);
+  // Use standard FMP stable API with ETF symbol (e.g. USO) instead of commodity codes
+  const d = await fmpGet(`/historical-price-eod/full?symbol=${symbol}&from=${from}&to=${to}`, key);
+  const prices = Array.isArray(d) ? d : (d && d.historical ? d.historical : []);
   const byYear = {};
   prices.forEach(p => {
     const y = p.date ? p.date.slice(0, 4) : null;
@@ -3088,7 +3085,7 @@ function MacroIndexSection({ fmpKey }) {
     if (!open || fetched.current || !fmpKey) return;
     fetched.current = true;
     setLoading(true);
-    fetchCommodityYearly('CLUSD', fmpKey)
+    fetchCommodityYearly('USO', fmpKey)
       .then(data => { setOilSeries(data); setError(null); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -3107,7 +3104,7 @@ function MacroIndexSection({ fmpKey }) {
           {oilSeries && (
             <div className="charts-grid">
               <HistoryChart
-                title="15Y Crude Oil Price (WTI)"
+                title="15Y Crude Oil ETF (USO)"
                 series={oilSeries}
                 yLabel="$/barrel"
                 color="#FB923C"
