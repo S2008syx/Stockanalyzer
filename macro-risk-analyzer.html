@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Macro Risk Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0C0F14; --bg-raised: #111520; --card: #151921; --card-hover: #1A2030;
+      --text: #E2E8F0; --text-sec: #94A3B8; --text-dim: #64748B;
+      --border: #252D3A; --border-hover: #3B4A5E;
+      --red: #F87171; --orange: #FB923C; --yellow: #FBBF24; --green: #4ADE80;
+      --blue: #60A5FA; --purple: #A78BFA; --cyan: #22D3EE;
+      --radius: 12px;
+    }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .back-btn {
+      position: fixed; top: 20px; left: 20px; z-index: 100;
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px;
+      transition: all 0.2s;
+    }
+    .back-btn:hover { background: var(--card-hover); border-color: var(--border-hover); }
+
+    .page-header {
+      text-align: center; padding: 60px 20px 30px;
+    }
+    .page-header h1 {
+      font-size: 32px; font-weight: 700;
+      background: linear-gradient(135deg, var(--red), var(--orange), var(--yellow));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .page-header p { color: var(--text-sec); margin-top: 8px; font-size: 15px; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+    /* ===== LOOP GRAPH ===== */
+    .loop-section { margin: 40px 0; }
+    .section-title {
+      font-size: 20px; font-weight: 700; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-title .tag {
+      font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    .loop-container {
+      position: relative;
+      display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+      gap: 0; padding: 40px 20px;
+    }
+
+    .loop-node {
+      position: relative;
+      background: var(--card); border: 2px solid var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      min-width: 180px; text-align: center; cursor: pointer;
+      transition: all 0.3s; z-index: 2;
+    }
+    .loop-node:hover { border-color: var(--border-hover); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+    .loop-node .node-title { font-size: 14px; font-weight: 600; }
+    .loop-node .node-sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    .loop-node.red { border-color: rgba(248,113,113,0.5); }
+    .loop-node.orange { border-color: rgba(251,146,60,0.5); }
+    .loop-node.yellow { border-color: rgba(251,191,36,0.5); }
+    .loop-node.blue { border-color: rgba(96,165,250,0.5); }
+    .loop-node.purple { border-color: rgba(167,139,250,0.5); }
+    .loop-node.cyan { border-color: rgba(34,211,238,0.5); }
+
+    .loop-node .expand-indicator {
+      position: absolute; top: -8px; right: -8px;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--blue); color: #fff; font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(96,165,250,0.4);
+    }
+
+    .loop-arrow {
+      font-size: 24px; color: var(--text-dim); padding: 0 6px;
+      display: flex; align-items: center; user-select: none;
+    }
+
+    .loop-row {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 4px; margin-bottom: 16px; width: 100%;
+    }
+
+    .feedback-arrow {
+      width: 100%; text-align: center; color: var(--red);
+      font-size: 14px; font-weight: 600; margin: -8px 0 8px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .feedback-arrow::before, .feedback-arrow::after {
+      content: ''; flex: 1; max-width: 200px; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--red), transparent);
+    }
+
+    /* Popup for derivative questions */
+    .node-popup {
+      display: none; position: absolute; top: calc(100% + 12px); left: 50%;
+      transform: translateX(-50%); z-index: 10;
+      background: var(--bg-raised); border: 1px solid var(--border-hover);
+      border-radius: var(--radius); padding: 16px; min-width: 300px; max-width: 400px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+    .node-popup::before {
+      content: ''; position: absolute; top: -6px; left: 50%; transform: translateX(-50%) rotate(45deg);
+      width: 12px; height: 12px; background: var(--bg-raised); border-left: 1px solid var(--border-hover);
+      border-top: 1px solid var(--border-hover);
+    }
+    .loop-node.active .node-popup { display: block; }
+    .node-popup h4 { font-size: 13px; color: var(--orange); margin-bottom: 8px; text-align: left; }
+    .node-popup ul { list-style: none; text-align: left; }
+    .node-popup li {
+      font-size: 12px; color: var(--text-sec); padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex; align-items: flex-start; gap: 6px;
+    }
+    .node-popup li:last-child { border: none; }
+    .node-popup li::before { content: '?'; color: var(--orange); font-weight: 700; flex-shrink: 0; }
+    .node-popup .q-given { color: var(--text); }
+    .node-popup .q-new::before { content: '!'; color: var(--cyan); }
+    .node-popup .q-new { color: var(--cyan); }
+
+    /* ===== DEBATE TABLE ===== */
+    .debate-section { margin: 50px 0; }
+    .debate-table {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    }
+    .debate-table th {
+      background: var(--bg-raised); padding: 12px 16px; font-size: 13px;
+      text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);
+      border-bottom: 1px solid var(--border); text-align: left;
+    }
+    .debate-table td {
+      padding: 12px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      vertical-align: top;
+    }
+    .debate-table tr:last-child td { border-bottom: none; }
+    .debate-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .verdict-win { color: var(--red); font-weight: 600; }
+    .verdict-draw { color: var(--yellow); font-weight: 600; }
+    .verdict-lose { color: var(--green); font-weight: 600; }
+
+    .point-col { color: var(--red); }
+    .counter-col { color: var(--green); }
+    .topic-col { color: var(--blue); font-weight: 600; }
+
+    /* ===== ASSUMPTIONS ===== */
+    .assumptions-section { margin: 50px 0 80px; }
+    .assumption-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px 24px; margin-bottom: 12px;
+      border-left: 3px solid var(--orange);
+    }
+    .assumption-card h4 { font-size: 14px; font-weight: 600; color: var(--orange); margin-bottom: 6px; }
+    .assumption-card p { font-size: 13px; color: var(--text-sec); }
+    .assumption-card .evidence {
+      margin-top: 8px; font-size: 12px; color: var(--text-dim);
+      padding-left: 12px; border-left: 2px solid rgba(251,146,60,0.3);
+    }
+
+    /* ===== COLLATERAL DAMAGE ===== */
+    .collateral-section { margin: 40px 0; }
+    .collateral-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+    .collateral-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 18px 20px; border-top: 3px solid var(--purple);
+    }
+    .collateral-card h4 { font-size: 14px; font-weight: 600; color: var(--purple); margin-bottom: 6px; }
+    .collateral-card p { font-size: 13px; color: var(--text-sec); }
+    .collateral-card .stat { color: var(--red); font-weight: 600; }
+
+    @media (max-width: 768px) {
+      .loop-node { min-width: 140px; padding: 12px 14px; }
+      .loop-node .node-title { font-size: 12px; }
+      .node-popup { min-width: 260px; }
+      .debate-table { font-size: 12px; }
+      .page-header h1 { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<button class="back-btn" onclick="window.location.href='index.html'">&larr; Back to Stock Analyzer</button>
+
+<div class="page-header">
+  <h1>Macro Risk Analyzer</h1>
+  <p>Systemic Risk Transmission Loop &mdash; A Fragile Equilibrium Under Stress</p>
+</div>
+
+<div class="container">
+
+  <!-- ===== DOOM LOOP GRAPH ===== -->
+  <div class="loop-section">
+    <div class="section-title">
+      Transmission Loop
+      <span class="tag" style="background: rgba(248,113,113,0.15); color: var(--red);">Doom Loop</span>
+    </div>
+
+    <!-- Main Chain -->
+    <div class="loop-container">
+      <div class="loop-row">
+        <div class="loop-node red" onclick="togglePopup(this)" id="node-oil">
+          <div class="node-title">Oil Price Surge</div>
+          <div class="node-sub">Hormuz Strait disruption</div>
+          <span class="expand-indicator">+</span>
+          <div class="node-popup">
+            <h4>Derivative Questions</h4>
+            <ul>
+              <li class="q-given">How long can the Hormuz blockade realistically last? Traffic dropped from 153 to 13 ships/day (8%).</li>
+              <li class="q-given">Global oil reserves = 8.2B barrels, covering 400+ days of full stoppage. Price shock vs physical shortage?</li>
+              <li class="q-new">What is the insurance market response? Red Sea precedent shows premiums stay elevated long after conflict ends.</li>
+              <li class="q-new">How quickly can Qatar restart LNG exports? Weeks minimum &mdash; supply chain inertia.</li>
+              <li class="q-new">Could OPEC+ use this as cover to maintain production cuts longer?</li>
+            </ul>
+          </div>
+        </div>
+        <div class="loop-arrow">&rarr;</div>
+
+        <div class="loop-node orange" onclick="togglePopup(this)" id="node-inflation">
+          <div class="node-title">Imported Inflation</div>
+          <div class="node-sub">CPI pushed above 3%</div>
+          <span class="expand-indicator">+</span>
+          <div class="node-popup">
+            <h4>Derivative Questions</h4>
+            <ul>
+              <li class="q-given">CPI at 3% &mdash; not high but definitely not low. How sticky is energy-driven inflation?</li>
+              <li class="q-new">What is the pass-through lag from crude to consumer prices? Historically 3-6 months.</li>
+              <li class="q-new">Will wage growth keep pace, or does real purchasing power erode further?</li>
+              <li class="q-new">How does this interact with shelter inflation that's already sticky?</li>
+            </ul>
+          </div>
+        </div>
+        <div class="loop-arrow">&rarr;</div>
+
+        <div class="loop-node yellow" onclick="togglePopup(this)" id="node-fed">
+          <div class="node-title">Fed Holds / Hikes</div>
+          <div class="node-sub">No rate cuts, possible hike</div>
+          <span class="expand-indicator">+</span>
+          <div class="node-popup">
+            <h4>Derivative Questions</h4>
+            <ul>
+              <li class="q-given">Market priced in 1-2 cuts this year. Zero cuts = 2-4% valuation compression. Forced hike = catastrophe.</li>
+              <li class="q-given">March no-cut probability at 99% (CME FedWatch). But year-end expectations still fragile.</li>
+              <li class="q-new">If Fed is forced to hike into a slowing economy, does this trigger a policy error narrative?</li>
+              <li class="q-new">How do EM currencies react? Dollar strength could amplify global stress.</li>
+              <li class="q-new">Could the Fed use macro-prudential tools instead of rate hikes?</li>
+            </ul>
+          </div>
+        </div>
+        <div class="loop-arrow">&rarr;</div>
+
+        <div class="loop-node blue" onclick="togglePopup(this)" id="node-valuation">
+          <div class="node-title">Wall St Valuation Kill</div>
+          <div class="node-sub">Multiple compression</div>
+          <span class="expand-indicator">+</span>
+          <div class="node-popup">
+            <h4>Derivative Questions</h4>
+            <ul>
+              <li class="q-given">Current valuations priced for 1 rate cut this year. Any deviation = re-pricing.</li>
+              <li class="q-new">Which sectors get hit first? Growth/Tech vs Value rotation dynamics?</li>
+              <li class="q-new">How do buyback programs respond? Corporate treasury pullback could amplify selling.</li>
+              <li class="q-new">At what S&P level do margin calls and systematic de-leveraging kick in?</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="loop-row">
+        <div class="loop-arrow" style="transform: rotate(90deg); margin: 0 auto;">&darr;</div>
+      </div>
+
+      <div class="loop-row">
+        <div class="loop-node purple" onclick="togglePopup(this)" id="node-consumption">
+          <div class="node-title">K-Shape Upper End</div>
+          <div class="node-sub">Wealth effect reversal</div>
+          <span class="expand-indicator">+</span>
+          <div class="node-popup">
+            <h4>Derivative Questions</h4>
+            <ul>
+              <li class="q-given">White-collar layoffs + asset deflation = double hit. Feb net layoffs 92K, full year 1.17M (post-COVID high).</li>
+              <li class="q-given">Asymmetric wealth effect: consumption drops faster on asset decline than it rises on gains.</li>
+              <li class="q-new">How much of U.S. consumption is driven by the top 20%? Estimates range 40-60%.</li>
+              <li class="q-new">How quickly does sentiment shift? Is there a confidence cliff or gradual fade?</li>
+              <li class="q-new">At what unemployment rate does the "delicate balance" break?</li>
+            </ul>
+          </div>
+        </div>
+        <div class="loop-arrow">&rarr;</div>
+
+        <div class="loop-node red" onclick="togglePopup(this)" id="node-double">
+          <div class="node-title">Stock Price Double Kill</div>
+          <div class="node-sub">Earnings miss + multiple compression</div>
+          <span class="expand-indicator">+</span>
+          <div class="node-popup">
+            <h4>Derivative Questions</h4>
+            <ul>
+              <li class="q-given">Consumption decline feeds back into lower earnings &rarr; further valuation compression.</li>
+              <li class="q-new">Which earnings season triggers the re-rating? Q2 or Q3 most vulnerable?</li>
+              <li class="q-new">How do algorithms and passive flows amplify the sell-off?</li>
+              <li class="q-new">Is there a Fed put? At what drawdown level does the Fed intervene?</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="feedback-arrow">&#8634; Feedback Loop &mdash; Consumption decline reinforces stock price decline</div>
+    </div>
+  </div>
+
+  <!-- ===== COLLATERAL DAMAGE ===== -->
+  <div class="collateral-section">
+    <div class="section-title">
+      Collateral Damage Channels
+      <span class="tag" style="background: rgba(167,139,250,0.15); color: var(--purple);">Spillover</span>
+    </div>
+    <div class="collateral-grid">
+      <div class="collateral-card">
+        <h4>Subprime ABS Deterioration</h4>
+        <p>ABS subprime delinquency rate at <span class="stat">6.9% &mdash; all-time high</span>. Fed data shows Q3 uptick in low-income auto loan defaults (+70bps). Canary in the coal mine for broader consumer credit.</p>
+      </div>
+      <div class="collateral-card">
+        <h4>Credit Market Complacency</h4>
+        <p>Default rate at <span class="stat">0.40%</span> &mdash; investment-grade spreads reflect systemic complacency. HY OAS at 2.9%, approaching 2007 lows (2.4%). Spec-grade defaults already at 4.8% (S&P).</p>
+      </div>
+      <div class="collateral-card">
+        <h4>AI Cannot Save the Economy Short-Term</h4>
+        <p>AI is deflationary: Goldman's doom loop (AI &rarr; layoffs &rarr; reduced consumption &rarr; more AI). New job creation lags job destruction. <span class="stat">Will buy the dip, but AI won't fill the short-term GDP gap.</span></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DEBATE TABLE ===== -->
+  <div class="debate-section">
+    <div class="section-title">
+      Argument Scorecard
+      <span class="tag" style="background: rgba(96,165,250,0.15); color: var(--blue);">Point vs Counter</span>
+    </div>
+    <table class="debate-table">
+      <thead>
+        <tr>
+          <th style="width:18%">Topic</th>
+          <th style="width:32%">Bear Case (Point)</th>
+          <th style="width:32%">Bull Counter</th>
+          <th style="width:18%">Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="topic-col">Oil & Inflation</td>
+          <td class="point-col">Hormuz blockade unprecedented. 153&rarr;13 ships/day. Not a normal geopolitical shock.</td>
+          <td class="counter-col">8.2B barrel reserves cover 400+ days. Price shock, not physical shortage.</td>
+          <td><span class="verdict-win">Bear Wins</span></td>
+        </tr>
+        <tr>
+          <td class="topic-col">Fed & Rates</td>
+          <td class="point-col">Zero cuts = valuation hit. Forced hike scenario if inflation spikes.</td>
+          <td class="counter-col">Market already priced ~1 cut max. Surprise space limited.</td>
+          <td><span class="verdict-draw">Lean Bear</span></td>
+        </tr>
+        <tr>
+          <td class="topic-col">K-Shape Consumption</td>
+          <td class="point-col">White-collar layoffs + asset decline = double hit. 1.17M layoffs (post-COVID high).</td>
+          <td class="counter-col">High-income resilience from housing equity, diversified assets.</td>
+          <td><span class="verdict-win">Bear Wins</span> (strongest arg)</td>
+        </tr>
+        <tr>
+          <td class="topic-col">Subprime ABS</td>
+          <td class="point-col">6.9% delinquency, all-time high. Low-income auto defaults rising.</td>
+          <td class="counter-col">Subprime auto = 14% of total. Not on bank balance sheets. Needs catalyst.</td>
+          <td><span class="verdict-draw">Draw</span></td>
+        </tr>
+        <tr>
+          <td class="topic-col">Credit Spreads</td>
+          <td class="point-col">HY OAS 2.9%, near 2007 lows. Spec-grade defaults at 4.8%.</td>
+          <td class="counter-col">Low spread &ne; imminent crisis. Needs recession catalyst.</td>
+          <td><span class="verdict-win">Bear Wins</span></td>
+        </tr>
+        <tr>
+          <td class="topic-col">AI & Economy</td>
+          <td class="point-col">AI is deflationary short-term. No crisis was ever solved by cost-cutting alone.</td>
+          <td class="counter-col">AI = half of GDP growth. S&P earnings +14.7%. Not pure bubble.</td>
+          <td><span class="verdict-draw">Lean Bear</span></td>
+        </tr>
+        <tr>
+          <td class="topic-col">LTCM Analogy</td>
+          <td class="point-col">Fragile equilibrium. Multiple stressors stacking. Hormuz = force majeure trigger.</td>
+          <td class="counter-col">Timeline is bear's enemy. 400-day reserves, Fed has ammo, earnings still growing.</td>
+          <td><span class="verdict-win">Bear Wins</span> (framework)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== UNDERLYING ASSUMPTIONS ===== -->
+  <div class="assumptions-section">
+    <div class="section-title">
+      Underlying Assumptions
+      <span class="tag" style="background: rgba(251,146,60,0.15); color: var(--orange);">Foundation</span>
+    </div>
+
+    <div class="assumption-card">
+      <h4>1. This War Is Being Underestimated</h4>
+      <p>The assassination of Iran's supreme leader is historically unprecedented. The Hormuz Strait disruption has no comparable precedent in the past 30 years. Trump's "it'll be over soon" is not credible.</p>
+      <div class="evidence">Evidence: Red Sea crisis showed that even after military resolution, insurance premiums and shipping reroutes persist for months. Qatar LNG restart requires weeks minimum.</div>
+    </div>
+
+    <div class="assumption-card">
+      <h4>2. The U.S. Economy Is a Delicate Balance (LTCM Analogy)</h4>
+      <p>Employment market: companies aren't firing but aren't hiring. Inflation at 3%: not alarming but not comfortable. Bottom-tier consumers (young people) are stretched to breaking point.</p>
+      <div class="evidence">Evidence: Among high school peers, only the GPA top-1 (Berkeley STEM) has stable employment. Others struggle with frugal living or can't find minimum wage jobs. U.S. consumption is largely propped up by stock market gains.</div>
+    </div>
+
+    <div class="assumption-card">
+      <h4>3. Multiple Stress Vectors Are Converging Simultaneously</h4>
+      <p>Oil spike + employment deterioration + AI-driven layoffs + subprime deterioration + Fed policy dilemma + elevated valuations. Each alone is survivable; combined, tail risk is far higher than markets price.</p>
+      <div class="evidence">Evidence: Like LTCM before the Russian default &mdash; the system isn't failing from within, it needs an external force to break the fragile equilibrium. Hormuz may be that force majeure.</div>
+    </div>
+
+    <div class="assumption-card">
+      <h4>4. The Bear's Greatest Enemy Is Time</h4>
+      <p>This doom loop may take 6-18 months to fully materialize. Reserves provide a buffer, the Fed retains ammunition, and corporate earnings are still growing. The thesis is directionally correct but timing is uncertain.</p>
+      <div class="evidence">Hedge: Maintain conviction on direction while respecting that short-term mean-reversion and policy responses can delay the cascade.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function togglePopup(node) {
+    const wasActive = node.classList.contains('active');
+    // Close all popups
+    document.querySelectorAll('.loop-node').forEach(n => n.classList.remove('active'));
+    // Toggle clicked one
+    if (!wasActive) node.classList.add('active');
+  }
+
+  // Close popup when clicking outside
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.loop-node')) {
+      document.querySelectorAll('.loop-node').forEach(n => n.classList.remove('active'));
+    }
+  });
+</script>
+
+</body>
+</html>
