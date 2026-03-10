@@ -662,35 +662,6 @@ async function fetchCommodityQuarterly(symbol, key) {
     .sort((a, b) => a.year.localeCompare(b.year));
 }
 
-async function fetchCPI(key, years) {
-  const d = await fmpGet(`/economic-indicators?name=CPI`, key);
-  const arr = Array.isArray(d) ? d : [];
-  const cutoff = CURRENT_YEAR - years;
-  return arr
-    .filter(r => r.date && parseInt(r.date.slice(0, 4), 10) >= cutoff)
-    .map(r => ({ year: r.date.slice(0, 7), value: r.value }))
-    .sort((a, b) => a.year.localeCompare(b.year));
-}
-
-async function fetchCPIQuarterly(key, years) {
-  const d = await fmpGet(`/economic-indicators?name=CPI`, key);
-  const arr = Array.isArray(d) ? d : [];
-  const cutoff = CURRENT_YEAR - years;
-  const byQ = {};
-  arr.filter(r => r.date && parseInt(r.date.slice(0, 4), 10) >= cutoff)
-    .forEach(r => {
-      const y = r.date.slice(0, 4);
-      const m = parseInt(r.date.slice(5, 7), 10);
-      const q = m <= 3 ? 'Q1' : m <= 6 ? 'Q2' : m <= 9 ? 'Q3' : 'Q4';
-      const label = `${y} ${q}`;
-      if (!byQ[label]) byQ[label] = { sum: 0, count: 0 };
-      byQ[label].sum += r.value;
-      byQ[label].count++;
-    });
-  return Object.entries(byQ)
-    .map(([year, v]) => ({ year, value: Number((v.sum / v.count).toFixed(2)) }))
-    .sort((a, b) => a.year.localeCompare(b.year));
-}
 
 async function fetchFmpNews(ticker, key, limit = 50) {
   return fmpGet(`/news/stock?symbols=${ticker}&limit=${limit}`, key);
@@ -3116,8 +3087,6 @@ function SupplementCashEquity({ debtSeries, totalAssetsSeries, netWorthSeries, c
 function MacroIndexSection({ fmpKey }) {
   const [open, setOpen] = useState(false);
   const [oilSeries, setOilSeries] = useState(null);
-  const [cpi15y, setCpi15y] = useState(null);
-  const [cpi5y20q, setCpi5y20q] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const fetched = useRef(false);
@@ -3126,15 +3095,9 @@ function MacroIndexSection({ fmpKey }) {
     if (!open || fetched.current || !fmpKey) return;
     fetched.current = true;
     setLoading(true);
-    Promise.all([
-      fetchCommodityQuarterly('USO', fmpKey),
-      fetchCPI(fmpKey, 15),
-      fetchCPIQuarterly(fmpKey, 5),
-    ])
-      .then(([oil, cpi15, cpi5q]) => {
+    fetchCommodityQuarterly('USO', fmpKey)
+      .then(oil => {
         setOilSeries(oil);
-        setCpi15y(cpi15);
-        setCpi5y20q(cpi5q);
         setError(null);
       })
       .catch(e => setError(e.message))
@@ -3151,7 +3114,7 @@ function MacroIndexSection({ fmpKey }) {
         <div className="supplement-body">
           {loading && <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-dim)' }}><Spinner /> Loading macro data...</div>}
           {error && <div style={{ textAlign: 'center', padding: 24, color: 'var(--danger)' }}>Error: {error}</div>}
-          {(oilSeries || cpi15y || cpi5y20q) && (
+          {oilSeries && (
             <div className="charts-grid">
               <HistoryChart
                 title="5Y Crude Oil ETF (USO)"
@@ -3159,20 +3122,6 @@ function MacroIndexSection({ fmpKey }) {
                 yLabel="$/barrel"
                 color="#FB923C"
                 formatFn={v => '$' + fmtNum(v, 2)}
-              />
-              <HistoryChart
-                title="15Y CPI (Consumer Price Index)"
-                series={cpi15y || []}
-                yLabel="CPI"
-                color="#60A5FA"
-                formatFn={v => fmtNum(v, 1)}
-              />
-              <HistoryChart
-                title="5Y CPI Quarterly (20 Seasons)"
-                series={cpi5y20q || []}
-                yLabel="CPI"
-                color="#34D399"
-                formatFn={v => fmtNum(v, 1)}
               />
             </div>
           )}
