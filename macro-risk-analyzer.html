@@ -281,11 +281,18 @@
         </div>
       </div>
 
-      <div class="loop-row">
-        <div class="loop-arrow" style="transform: rotate(90deg); margin: 0 auto;">&darr;</div>
-      </div>
+      <!-- SVG diagonal arrow from Wall St Valuation Kill to Stock Price Double Kill -->
+      <svg class="diagonal-arrow" id="diagonalArrow" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:1;">
+        <defs>
+          <marker id="arrowHead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#60A5FA" />
+          </marker>
+        </defs>
+        <line id="diagLine" stroke="#60A5FA" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowHead)" />
+        <text id="diagLabel" fill="#60A5FA" font-size="11" font-weight="600" font-family="Inter, sans-serif" text-anchor="middle"></text>
+      </svg>
 
-      <div class="loop-row">
+      <div class="loop-row" style="margin-top: 24px;">
         <div class="loop-node purple" onclick="togglePopup(this)" id="node-consumption">
           <div class="node-title">K-Shape Upper End</div>
           <div class="node-sub">Wealth effect reversal</div>
@@ -319,7 +326,6 @@
         </div>
       </div>
 
-      <div class="feedback-arrow">&#8634; Feedback Loop &mdash; Consumption decline reinforces stock price decline</div>
     </div>
   </div>
 
@@ -456,6 +462,37 @@
       document.querySelectorAll('.loop-node').forEach(n => n.classList.remove('active'));
     }
   });
+
+  // Draw diagonal arrow from "Wall St Valuation Kill" to "Stock Price Double Kill"
+  function drawDiagonalArrow() {
+    const container = document.querySelector('.loop-container');
+    const fromNode = document.getElementById('node-valuation');
+    const toNode = document.getElementById('node-double');
+    const line = document.getElementById('diagLine');
+    const label = document.getElementById('diagLabel');
+    if (!container || !fromNode || !toNode || !line || !label) return;
+
+    const cRect = container.getBoundingClientRect();
+    const fRect = fromNode.getBoundingClientRect();
+    const tRect = toNode.getBoundingClientRect();
+
+    const x1 = (fRect.left + fRect.width / 2) - cRect.left;
+    const y1 = (fRect.bottom) - cRect.top + 4;
+    const x2 = (tRect.left + tRect.width / 2) - cRect.left;
+    const y2 = (tRect.top) - cRect.top - 4;
+
+    line.setAttribute('x1', x1);
+    line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2);
+    line.setAttribute('y2', y2);
+
+    label.setAttribute('x', (x1 + x2) / 2 + 12);
+    label.setAttribute('y', (y1 + y2) / 2);
+    label.textContent = 'Valuation Kill → Double Kill';
+  }
+
+  drawDiagonalArrow();
+  window.addEventListener('resize', drawDiagonalArrow);
 </script>
 
 </body>
