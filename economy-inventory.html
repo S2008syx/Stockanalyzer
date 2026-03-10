@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Economy Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0C0F14; --bg-raised: #111520; --card: #151921; --card-hover: #1A2030;
+      --text: #E2E8F0; --text-sec: #94A3B8; --text-dim: #64748B;
+      --border: #252D3A; --border-hover: #3B4A5E;
+      --red: #F87171; --orange: #FB923C; --yellow: #FBBF24; --green: #4ADE80;
+      --blue: #60A5FA; --purple: #A78BFA; --cyan: #22D3EE;
+      --radius: 12px;
+    }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .back-btn {
+      position: fixed; top: 20px; left: 20px; z-index: 100;
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px;
+      transition: all 0.2s;
+    }
+    .back-btn:hover { background: var(--card-hover); border-color: var(--border-hover); }
+
+    .page-header {
+      text-align: center; padding: 60px 20px 30px;
+    }
+    .page-header h1 {
+      font-size: 32px; font-weight: 700;
+      background: linear-gradient(135deg, var(--red), var(--orange), var(--yellow));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .page-header p { color: var(--text-sec); margin-top: 8px; font-size: 15px; }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+    .inventory-list {
+      display: flex; flex-direction: column; gap: 12px;
+      margin-top: 32px; padding-bottom: 60px;
+    }
+
+    .inventory-item {
+      display: flex; align-items: center; gap: 16px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 24px;
+      cursor: pointer; transition: all 0.2s; text-decoration: none; color: var(--text);
+    }
+    .inventory-item:hover {
+      background: var(--card-hover); border-color: var(--border-hover);
+      transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      text-decoration: none;
+    }
+
+    .item-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+
+    .item-content { flex: 1; }
+    .item-title { font-size: 16px; font-weight: 600; }
+    .item-desc { font-size: 13px; color: var(--text-sec); margin-top: 4px; }
+
+    .item-arrow { color: var(--text-dim); font-size: 18px; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+<button class="back-btn" onclick="window.location.href='index.html'">&larr; Back to Homepage</button>
+
+<div class="page-header">
+  <h1>Economy Analysis</h1>
+  <p>Select an analysis module to explore</p>
+</div>
+
+<div class="container">
+  <div class="inventory-list">
+
+    <a href="macro-risk-analyzer.html" class="inventory-item">
+      <div class="item-icon" style="background: linear-gradient(135deg, rgba(248,113,113,0.2), rgba(251,146,60,0.2));">
+        &#9888;
+      </div>
+      <div class="item-content">
+        <div class="item-title">Macro Risk Analyzer</div>
+        <div class="item-desc">Tariff-inflation doom loop, oil price trends, and systemic risk analysis</div>
+      </div>
+      <div class="item-arrow">&rsaquo;</div>
+    </a>
+
+  </div>
+</div>
+
+</body>
+</html>
