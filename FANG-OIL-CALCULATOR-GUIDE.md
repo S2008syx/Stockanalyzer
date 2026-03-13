@@ -136,19 +136,25 @@ After you select which methods to include, the calculator computes:
 |--------|---------|---------------|
 | **Mean** | Average of selected methods' EPS | Best single-point estimate |
 | **Std Dev (SD)** | Sample standard deviation (n-1) | How much the methods disagree |
-| **68% CI** | Mean ± 1 SD | ~68% chance EPS falls in this range (assuming normality) |
-| **95% CI** | Mean ± t × SE (t-distribution) | 95% confidence interval, accounts for small sample with t-distribution |
+| **68% CI** | Mean ± 1 SD | ~68% chance EPS falls in this range under t-distribution |
+| **95% CI** | Mean ± t × SE (t-distribution) | 95% confidence interval, uses t critical value for df = n-1 |
 
 The t-distribution critical value adjusts automatically based on how many methods you select (df = n-1).
 
 ---
 
-## Normal Distribution Chart
+## Student's t-Distribution Chart
 
-The chart plots a bell curve centered on your mean EPS with the spread determined by the standard deviation. The **red dot**:
+The chart plots a **Student's t-distribution** (not a normal/Gaussian distribution) centered on the mean EPS. We use the t-distribution because:
+
+1. **Small sample size:** With only 2–6 methods, the normal distribution underestimates tail risk. The t-distribution has heavier tails, properly reflecting the greater uncertainty that comes with few data points.
+2. **Degrees of freedom (df = n−1):** The df is displayed in the chart title and adjusts automatically as you select/deselect methods. Lower df → fatter tails → wider uncertainty.
+3. **Converges to normal:** As you select more methods (higher df), the t-distribution approaches the normal distribution. At df ≥ 30 the difference is negligible.
+
+The **red dot**:
 - By default: sits at the mean
-- After entering a Target EPS: slides to that value on the curve
-- Hover to see the **percentile** (what % of the distribution is below that EPS)
+- Use the slider or input a Target EPS: the dot slides along the t-distribution curve
+- Hover to see the **percentile** (computed using the t-distribution CDF, not the normal CDF)
 
 Requires at least 2 methods selected (otherwise SD = 0, no curve to draw).
 
