@@ -3006,7 +3006,7 @@ function MetricsExplainer() {
 // ============================================================
 // SECTION 16: SUPPLEMENT CHARTS SECTIONS
 // ============================================================
-function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, profitMarginSeries, expectedYears }) {
+function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, profitMarginSeries, salesSeries, expectedYears }) {
   const [open, setOpen] = useState(false);
   const yrs = expectedYears || Math.max((epsSeries || []).length, (psSeries || []).length, (evEbitda || []).length);
   const tag = yrs && yrs < DATA_YEARS ? `${yrs}Y` : '15Y';
@@ -3029,6 +3029,7 @@ function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, profitMa
               formatFn={v => v != null ? fmtNum(v, 1) + 'x' : '-'}
             />
             <HistoryChart title={`${tag} PS Ratio`} series={psSeries || []} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
+            <HistoryChart title={`${tag} Revenue (Sales)`} series={salesSeries || []} yLabel="Revenue" color="#38BDF8" formatFn={v => '$' + fmtBigNum(v)} />
             {(wcSeries || []).length > 0 && (
               <HistoryChart
                 title={`${(wcSeries || []).length}Y Working Capital`}
@@ -3595,6 +3596,15 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
     return mergeHistoryInputs(checklist.ocf15?.data || [], 'ocf15', v => v * 1e9);
   }, [checklist, userInputs]);
 
+  // Sales (Revenue) series
+  const salesSeries = useMemo(() => {
+    const income = rawData.income || [];
+    return income.map(d => ({
+      year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null),
+      value: d.revenue
+    })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  }, [rawData]);
+
   // Profit Margin series
   const profitMarginSeries = useMemo(() => {
     return checklist.profitMargin15?.data || [];
@@ -3819,7 +3829,7 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
             })()}
           </div>
 
-          <SupplementValuation evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} wcSeries={wcSeries} profitMarginSeries={profitMarginSeries} expectedYears={checklist._meta?.expectedYears} />
+          <SupplementValuation evEbitda={evEbitda} epsSeries={epsSeries} psSeries={psSeries} wcSeries={wcSeries} profitMarginSeries={profitMarginSeries} salesSeries={salesSeries} expectedYears={checklist._meta?.expectedYears} />
           <SupplementCashEquity debtSeries={debtSeries} totalAssetsSeries={totalAssetsSeries} netWorthSeries={netWorthSeries} cashLiquiditySeries={cashLiquiditySeries} expectedYears={checklist._meta?.expectedYears} />
 
           <MacroIndexSection fmpKey={localApiKeys.fmp} />
