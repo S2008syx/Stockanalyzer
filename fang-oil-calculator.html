@@ -240,6 +240,14 @@ const DEFAULT_PARAMS = {
   m5_reg_intercept: -8.490,
   m5_reg_slope: 0.1779,
   m5_r_squared: 0.9431,
+
+  // Method 6 (Chain: Model I → Model II)
+  m6_margin_slope: 0.70,
+  m6_margin_intercept: -18.55,
+  m6_margin_r2: 0.87,
+  m6_eps_slope: 0.47,
+  m6_eps_intercept: 0.99,
+  m6_eps_r2: 0.88,
 };
 
 // Param display metadata
@@ -285,6 +293,14 @@ const PARAM_META = [
   { key: 'm5_reg_intercept', label: 'Regression Intercept', source: 'Post-Endeavor OLS' },
   { key: 'm5_reg_slope', label: 'Regression Slope', source: 'Post-Endeavor OLS' },
   { key: 'm5_r_squared', label: 'R²', source: 'Post-Endeavor OLS' },
+
+  { section: 'Method 6: Barrel-to-Earnings Chain' },
+  { key: 'm6_margin_slope', label: 'Model I Slope (WTI→Margin)', source: 'FY22-25 OLS, R²=0.87' },
+  { key: 'm6_margin_intercept', label: 'Model I Intercept', source: 'FY22-25 OLS' },
+  { key: 'm6_margin_r2', label: 'Model I R²', source: 'FY22-25 OLS' },
+  { key: 'm6_eps_slope', label: 'Model II Slope (Margin→EPS)', source: 'FY22-25 OLS, R²=0.88' },
+  { key: 'm6_eps_intercept', label: 'Model II Intercept', source: 'FY22-25 OLS' },
+  { key: 'm6_eps_r2', label: 'Model II R²', source: 'FY22-25 OLS' },
 ];
 
 // ============================================================
@@ -352,13 +368,21 @@ function calcMethod5(wti, p) {
   return qEPS * 4;
 }
 
+function calcMethod6(wti, p) {
+  // Chain: WTI → Margin (Model I) → EPS (Model II)
+  const margin = p.m6_margin_slope * wti + p.m6_margin_intercept;
+  const eps = p.m6_eps_slope * margin + p.m6_eps_intercept;
+  return eps; // already annual
+}
+
 function calcAll(wti, p) {
   const m1 = calcMethod1(wti, p);
   const m2 = calcMethod2(wti, p);
   const m3 = calcMethod3(wti, p);
   const m4 = calcMethod4(wti, p);
   const m5 = calcMethod5(wti, p);
-  return { methods: [m1, m2, m3, m4, m5] };
+  const m6 = calcMethod6(wti, p);
+  return { methods: [m1, m2, m3, m4, m5, m6] };
 }
 
 // t-distribution critical values (97.5% quantile) by df
@@ -666,6 +690,7 @@ const METHOD_INFO = [
   { name: 'M3: Bottom-Up (Oil+Gas $3)', desc: 'Same as M2 but gas=$3.00/Mcf scenario' },
   { name: 'M4: Regression Calibrated', desc: 'M3 raw output calibrated via 5Q linear regression' },
   { name: 'M5: Historical OLS', desc: 'Direct EPS~WTI regression on post-Endeavor quarters' },
+  { name: 'M6: Barrel→Earnings Chain', desc: 'WTI→Margin→EPS chain (FY22-25 annual OLS)' },
 ];
 
 const STORE_SELECTION_KEY = 'fang_oil_selection';
