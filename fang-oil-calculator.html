@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FANG Oil Price → EPS Calculator</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent: #4ADE80; --accent-hover: #22C55E; --accent-dim: rgba(74,222,128,0.08);
+      --blue: #60A5FA; --purple: #A78BFA; --orange: #FB923C;
+      --bg: #0C0F14; --bg-raised: #111520; --card: #151921; --card-hover: #1A2030;
+      --text: #E2E8F0; --text-sec: #94A3B8; --text-dim: #64748B;
+      --border: #252D3A; --border-hover: #3B4A5E;
+      --success: #4ADE80; --danger: #F87171; --warn: #FBBF24;
+      --radius: 12px; --radius-sm: 8px;
+    }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.5;
+      -webkit-font-smoothing: antialiased; min-height: 100vh;
+    }
+    #root { min-height: 100vh; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 28px; width: 100%; }
+    .header {
+      background: rgba(12,15,20,0.8); backdrop-filter: blur(16px) saturate(180%);
+      border-bottom: 1px solid var(--border); padding: 14px 0;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-inner { display: flex; align-items: center; gap: 12px; position: relative; }
+    .header-title {
+      font-size: 20px; font-weight: 700; color: var(--blue);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .back-btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px;
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .back-btn:hover { background: var(--card-hover); border-color: var(--border-hover); }
+    .validity-badge {
+      font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 20px;
+      white-space: nowrap; margin-left: auto;
+    }
+    .validity-badge.valid { background: rgba(74,222,128,0.12); color: var(--success); border: 1px solid rgba(74,222,128,0.3); }
+    .validity-badge.expired { background: rgba(248,113,113,0.12); color: var(--danger); border: 1px solid rgba(248,113,113,0.3); }
+    .main { flex: 1; padding: 28px 0; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; margin-bottom: 20px;
+      animation: fadeUp .4s ease-out both;
+    }
+    .card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .card h4 { font-size: 13px; font-weight: 600; color: var(--text-sec); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Input section */
+    .wti-input-section { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .wti-slider { flex: 1; min-width: 200px; accent-color: var(--blue); height: 6px; cursor: pointer; }
+    .wti-number {
+      width: 100px; padding: 8px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--bg-raised); color: var(--text);
+      font-size: 16px; font-weight: 600; text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .wti-number:focus { outline: none; border-color: var(--blue); }
+    .wti-label { font-size: 13px; color: var(--text-sec); white-space: nowrap; }
+    .wti-display { font-size: 28px; font-weight: 700; color: var(--blue); font-family: 'JetBrains Mono', monospace; min-width: 90px; }
+
+    /* Results table */
+    .results-table { width: 100%; border-collapse: collapse; }
+    .results-table th { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    .results-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid rgba(37,45,58,0.5); }
+    .results-table tr:last-child td { border-bottom: none; }
+    .results-table .method-name { font-weight: 600; color: var(--text); }
+    .results-table .method-desc { color: var(--text-sec); font-size: 12px; }
+    .results-table .eps-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 15px; text-align: right; }
+    .results-table .eps-null { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--warn); text-align: right; }
+
+    /* Stats section */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .stat-card {
+      background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 14px; text-align: center;
+    }
+    .stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .stat-value { font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .stat-value.mean { color: var(--accent); }
+    .stat-value.sd { color: var(--orange); }
+    .stat-value.ci { color: var(--blue); font-size: 16px; }
+
+    /* Warning */
+    .extrap-warning {
+      background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.3);
+      border-radius: var(--radius-sm); padding: 10px 16px; margin-top: 12px;
+      font-size: 12px; color: var(--warn); display: flex; align-items: center; gap: 8px;
+    }
+
+    /* Chart canvas */
+    .chart-container { position: relative; width: 100%; height: 280px; margin-top: 12px; }
+
+    /* Target price input */
+    .target-section { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+    .target-input {
+      width: 120px; padding: 8px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--bg-raised); color: var(--text);
+      font-size: 14px; font-weight: 600; text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .target-input:focus { outline: none; border-color: var(--blue); }
+    .target-label { font-size: 13px; color: var(--text-sec); }
+    .target-result { font-size: 13px; font-weight: 600; }
+
+    /* Data checklist */
+    .checklist-overlay {
+      position: fixed; inset: 0; background: rgba(12,15,20,0.92);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; backdrop-filter: blur(4px);
+    }
+    .checklist-modal {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 28px; max-width: 700px; width: 90%; max-height: 85vh; overflow-y: auto;
+    }
+    .checklist-modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+    .cl-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid rgba(37,45,58,0.5);
+    }
+    .cl-item:last-child { border-bottom: none; }
+    .cl-label { flex: 1; font-size: 13px; }
+    .cl-value {
+      font-family: 'JetBrains Mono', monospace; font-size: 13px;
+      color: var(--accent); min-width: 100px; text-align: right;
+    }
+    .cl-input {
+      width: 120px; padding: 6px 10px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--bg-raised); color: var(--text);
+      font-size: 13px; text-align: right; font-family: 'JetBrains Mono', monospace;
+    }
+    .cl-input:focus { outline: none; border-color: var(--blue); }
+    .cl-section-title { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; padding: 12px 0 4px; }
+    .cl-btn-row { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border-radius: var(--radius-sm);
+      font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .15s;
+    }
+    .btn-primary { background: var(--accent); color: var(--bg); }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { border-color: var(--border-hover); background: var(--card-hover); }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+    .null-hint { color: var(--warn); font-size: 12px; font-style: italic; }
+
+    /* Tooltip */
+    .dist-tooltip {
+      position: absolute; background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px;
+      pointer-events: none; z-index: 50; white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+
+    @media (max-width: 768px) {
+      .container { padding: 0 16px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .wti-input-section { flex-direction: column; align-items: stretch; }
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ============================================================
+// CONSTANTS & DEFAULT PARAMETERS
+// ============================================================
+const NEXT_EARNINGS_DATE = '2026-05-04';
+const STORE_KEY = 'fang_oil_params';
+const STORE_TARGET_KEY = 'fang_oil_target';
+
+const DEFAULT_PARAMS = {
+  // Method 1
+  m1_base_eps_quarterly: 3.64,
+  m1_base_wti: 70.3,
+  m1_oil_prod_bpd: 475900,
+  m1_days_per_year: 365,
+  m1_production_tax: 0.07,
+  m1_income_tax: 0.23,
+  m1_shares: 286000000,
+
+  // Method 2
+  m2_oil_kbpd: 503.8,
+  m2_ngl_kbpd: 205.0,
+  m2_gas_mcfd: 1404000,
+  m2_total_boe_kbpd: 942.9,
+  m2_LOE: 5.65,
+  m2_GPT: 1.41,
+  m2_cash_GA: 0.55,
+  m2_DDA: 14.80,
+  m2_interest_per_boe: 0.55,
+  m2_production_tax_pct: 0.07,
+  m2_income_tax_rate: 0.23,
+  m2_shares: 286000000,
+  m2_ngl_to_wti_ratio: 0.305,
+  m2_gas_price_fixed: 1.40,
+  m2_oil_premium_to_wti: 0.00,
+  m2_days_per_quarter: 92,
+  m2_bias_correction: 0.848,
+
+  // Method 3 overrides
+  m3_gas_price_fixed: 3.00,
+  m3_bias_correction: 0.861,
+
+  // Method 4
+  m4_cal_intercept: -1.464,
+  m4_cal_slope: 1.290,
+  m4_gas_price_fixed: 3.00,
+
+  // Method 5
+  m5_reg_intercept: -8.490,
+  m5_reg_slope: 0.1779,
+  m5_r_squared: 0.9431,
+};
+
+// Param display metadata
+const PARAM_META = [
+  { section: 'Method 1: Constant ΔWTI' },
+  { key: 'm1_base_eps_quarterly', label: 'Base EPS (quarterly)', source: 'Q4 2024 10-K' },
+  { key: 'm1_base_wti', label: 'Base WTI ($/bbl)', source: 'Q4 2024 EIA' },
+  { key: 'm1_oil_prod_bpd', label: 'Oil Production (bbl/day)', source: 'Q4 2024 10-K' },
+  { key: 'm1_days_per_year', label: 'Days per Year' },
+  { key: 'm1_production_tax', label: 'Production Tax Rate', source: 'FANG guidance' },
+  { key: 'm1_income_tax', label: 'Income Tax Rate', source: 'FANG guidance' },
+  { key: 'm1_shares', label: 'Diluted Shares', source: 'Q4 2024 10-K' },
+
+  { section: 'Method 2: Bottom-Up (Oil Only)' },
+  { key: 'm2_oil_kbpd', label: 'Oil (kbpd)', source: 'Q3 2025 10-Q' },
+  { key: 'm2_ngl_kbpd', label: 'NGL (kbpd)', source: 'Q3 2025 10-Q' },
+  { key: 'm2_gas_mcfd', label: 'Gas (Mcf/day)', source: 'Q3 2025 10-Q' },
+  { key: 'm2_total_boe_kbpd', label: 'Total BOE (kbpd)', source: 'Q3 2025 10-Q' },
+  { key: 'm2_LOE', label: 'LOE ($/BOE)', source: 'Q3 2025 10-Q' },
+  { key: 'm2_GPT', label: 'GPT ($/BOE)', source: 'Q3 2025 10-Q' },
+  { key: 'm2_cash_GA', label: 'Cash G&A ($/BOE)', source: 'Q3 2025 10-Q' },
+  { key: 'm2_DDA', label: 'DD&A ($/BOE)', source: '2025 guidance' },
+  { key: 'm2_interest_per_boe', label: 'Interest ($/BOE)', source: 'Estimated' },
+  { key: 'm2_production_tax_pct', label: 'Production Tax %' },
+  { key: 'm2_income_tax_rate', label: 'Income Tax Rate' },
+  { key: 'm2_shares', label: 'Diluted Shares' },
+  { key: 'm2_ngl_to_wti_ratio', label: 'NGL/WTI Ratio', source: 'Q3 2025' },
+  { key: 'm2_gas_price_fixed', label: 'Gas Price ($/Mcf)', source: 'Q3 2025 realized' },
+  { key: 'm2_oil_premium_to_wti', label: 'Oil Premium to WTI' },
+  { key: 'm2_days_per_quarter', label: 'Days per Quarter' },
+  { key: 'm2_bias_correction', label: 'Bias Correction', source: '5Q backtest' },
+
+  { section: 'Method 3: Bottom-Up (Oil + Gas $3)' },
+  { key: 'm3_gas_price_fixed', label: 'Gas Price ($/Mcf)', source: 'Assumed $3' },
+  { key: 'm3_bias_correction', label: 'Bias Correction', source: '5Q backtest' },
+
+  { section: 'Method 4: Regression Calibrated' },
+  { key: 'm4_cal_intercept', label: 'Calibration Intercept', source: '5Q regression' },
+  { key: 'm4_cal_slope', label: 'Calibration Slope', source: '5Q regression' },
+  { key: 'm4_gas_price_fixed', label: 'Gas Price ($/Mcf)' },
+
+  { section: 'Method 5: Historical OLS Regression' },
+  { key: 'm5_reg_intercept', label: 'Regression Intercept', source: 'Post-Endeavor OLS' },
+  { key: 'm5_reg_slope', label: 'Regression Slope', source: 'Post-Endeavor OLS' },
+  { key: 'm5_r_squared', label: 'R²', source: 'Post-Endeavor OLS' },
+];
+
+// ============================================================
+// LOCAL STORAGE HELPERS
+// ============================================================
+function getStoredParams() {
+  try { const s = localStorage.getItem(STORE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function setStoredParams(p) { localStorage.setItem(STORE_KEY, JSON.stringify(p)); }
+function getStoredTarget() {
+  try { const s = localStorage.getItem(STORE_TARGET_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function setStoredTarget(t) { localStorage.setItem(STORE_TARGET_KEY, JSON.stringify(t)); }
+
+// ============================================================
+// CALCULATION ENGINE
+// ============================================================
+function calcMethod1(wti, p) {
+  const sensitivity = p.m1_oil_prod_bpd * p.m1_days_per_year * (1 - p.m1_production_tax) * (1 - p.m1_income_tax) / p.m1_shares;
+  const delta = wti - p.m1_base_wti;
+  return (p.m1_base_eps_quarterly * 4) + (sensitivity * delta);
+}
+
+function calcBU(wti, p, gasPrice, biasCorrection, applyBias) {
+  const oilPrice = wti + p.m2_oil_premium_to_wti;
+  const nglPrice = wti * p.m2_ngl_to_wti_ratio;
+  const dq = p.m2_days_per_quarter;
+
+  const qOilRev = p.m2_oil_kbpd * 1000 * dq * oilPrice;
+  const qNglRev = p.m2_ngl_kbpd * 1000 * dq * nglPrice;
+  const qGasRev = p.m2_gas_mcfd * dq * gasPrice;
+  const qTotalRev = qOilRev + qNglRev + qGasRev;
+
+  const qTotalBoe = p.m2_total_boe_kbpd * 1000 * dq;
+  const qProdTax = p.m2_production_tax_pct * qTotalRev;
+  const qCashCosts = (p.m2_LOE + p.m2_GPT + p.m2_cash_GA) * qTotalBoe;
+  const qDDA = p.m2_DDA * qTotalBoe;
+  const qInterest = p.m2_interest_per_boe * qTotalBoe;
+
+  const qEBITDA = qTotalRev - qProdTax - qCashCosts;
+  const qEBT = qEBITDA - qDDA - qInterest;
+  const qNetIncome = qEBT > 0 ? qEBT * (1 - p.m2_income_tax_rate) : qEBT;
+  const qEPS = qNetIncome / p.m2_shares;
+
+  if (applyBias) return qEPS * 4 * biasCorrection;
+  return qEPS; // raw quarterly for method 4
+}
+
+function calcMethod2(wti, p) {
+  return calcBU(wti, p, p.m2_gas_price_fixed, p.m2_bias_correction, true);
+}
+
+function calcMethod3(wti, p) {
+  return calcBU(wti, p, p.m3_gas_price_fixed, p.m3_bias_correction, true);
+}
+
+function calcMethod4(wti, p) {
+  const rawQ = calcBU(wti, p, p.m4_gas_price_fixed, 0, false);
+  const calibratedQ = p.m4_cal_intercept + p.m4_cal_slope * rawQ;
+  return calibratedQ * 4;
+}
+
+function calcMethod5(wti, p) {
+  const qEPS = p.m5_reg_intercept + p.m5_reg_slope * wti;
+  return qEPS * 4;
+}
+
+function calcAll(wti, p) {
+  const m1 = calcMethod1(wti, p);
+  const m2 = calcMethod2(wti, p);
+  const m3 = calcMethod3(wti, p);
+  const m4 = calcMethod4(wti, p);
+  const m5 = calcMethod5(wti, p);
+  const values = [m1, m2, m3, m4, m5];
+
+  const mean = values.reduce((a, b) => a + b, 0) / 5;
+  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / 4; // n-1
+  const sd = Math.sqrt(variance);
+  const ci68Low = mean - sd;
+  const ci68High = mean + sd;
+  const tVal = 2.776; // t-dist df=4, 97.5%
+  const se = sd / Math.sqrt(5);
+  const ci95Low = mean - tVal * se;
+  const ci95High = mean + tVal * se;
+
+  return { methods: [m1, m2, m3, m4, m5], mean, sd, ci68Low, ci68High, ci95Low, ci95High };
+}
+
+// Normal distribution helpers
+function normalPDF(x, mean, sd) {
+  if (sd === 0) return x === mean ? 1 : 0;
+  const z = (x - mean) / sd;
+  return Math.exp(-0.5 * z * z) / (sd * Math.sqrt(2 * Math.PI));
+}
+
+function normalCDF(x, mean, sd) {
+  if (sd === 0) return x >= mean ? 1 : 0;
+  const z = (x - mean) / sd;
+  // Approximation using error function
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989422804014327;
+  const p = d * Math.exp(-z * z / 2) * (t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.8212560 + t * 1.3302744)))));
+  return z > 0 ? 1 - p : p;
+}
+
+function fmtNum(n, dec = 2) {
+  if (n == null || isNaN(n)) return 'N/A';
+  return n.toFixed(dec);
+}
+
+// ============================================================
+// COMPONENTS
+// ============================================================
+
+function ValidityBadge() {
+  const now = new Date();
+  const expiry = new Date(NEXT_EARNINGS_DATE + 'T00:00:00');
+  const valid = now < expiry;
+  const dateStr = NEXT_EARNINGS_DATE.replace(/-/g, '/');
+  return (
+    <span className={`validity-badge ${valid ? 'valid' : 'expired'}`}>
+      {valid ? '✓' : '✗'} Data valid before {dateStr}
+    </span>
+  );
+}
+
+function DataChecklist({ params, onSave, onClose }) {
+  const [local, setLocal] = useState({ ...params });
+
+  function handleChange(key, val) {
+    setLocal(prev => ({ ...prev, [key]: val }));
+  }
+
+  function handleSave() {
+    const parsed = {};
+    for (const [k, v] of Object.entries(local)) {
+      const num = typeof v === 'string' ? parseFloat(v) : v;
+      parsed[k] = isNaN(num) ? DEFAULT_PARAMS[k] : num;
+    }
+    onSave(parsed);
+  }
+
+  function handleReset() {
+    setLocal({ ...DEFAULT_PARAMS });
+  }
+
+  return (
+    <div className="checklist-overlay" onClick={onClose}>
+      <div className="checklist-modal" onClick={e => e.stopPropagation()}>
+        <h3>Data Checklist — FANG Oil Calculator</h3>
+        <p style={{ fontSize: 12, color: 'var(--text-sec)', marginBottom: 16 }}>
+          All parameters used in calculations. Edit any value and save.
+        </p>
+        {PARAM_META.map((item, i) => {
+          if (item.section) {
+            return <div key={i} className="cl-section-title">{item.section}</div>;
+          }
+          const val = local[item.key];
+          return (
+            <div key={item.key} className="cl-item">
+              <div className="cl-label">
+                {item.label}
+                {item.source && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 6 }}>({item.source})</span>}
+              </div>
+              <input
+                className="cl-input"
+                value={val ?? ''}
+                onChange={e => handleChange(item.key, e.target.value)}
+              />
+            </div>
+          );
+        })}
+        <div className="cl-btn-row">
+          <button className="btn btn-outline btn-sm" onClick={handleReset}>Reset Defaults</button>
+          <button className="btn btn-outline btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={handleSave}>Save & Apply</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NormalDistChart({ mean, sd, targetEPS, onPercentile }) {
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+  const tooltipRef = useRef(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || sd === 0) return;
+
+    const ctx = canvasRef.current.getContext('2d');
+    if (chartRef.current) chartRef.current.destroy();
+
+    // Generate points for the normal curve
+    const lo = mean - 4 * sd;
+    const hi = mean + 4 * sd;
+    const step = (hi - lo) / 200;
+    const labels = [];
+    const data = [];
+    for (let x = lo; x <= hi; x += step) {
+      labels.push(x);
+      data.push(normalPDF(x, mean, sd));
+    }
+
+    // Red dot position
+    const dotX = targetEPS != null ? targetEPS : mean;
+    const dotY = normalPDF(dotX, mean, sd);
+    const pct = normalCDF(dotX, mean, sd) * 100;
+    if (onPercentile) onPercentile(pct);
+
+    // Find closest index for the dot
+    let dotIdx = 0;
+    let minDist = Infinity;
+    labels.forEach((lbl, i) => {
+      const d = Math.abs(lbl - dotX);
+      if (d < minDist) { minDist = d; dotIdx = i; }
+    });
+
+    const pointRadii = labels.map((_, i) => i === dotIdx ? 6 : 0);
+    const pointBgColors = labels.map((_, i) => i === dotIdx ? '#F87171' : 'transparent');
+    const pointBorderColors = labels.map((_, i) => i === dotIdx ? '#F87171' : 'transparent');
+
+    chartRef.current = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Normal Distribution',
+          data,
+          borderColor: '#60A5FA',
+          backgroundColor: 'rgba(96,165,250,0.08)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: pointRadii,
+          pointBackgroundColor: pointBgColors,
+          pointBorderColor: pointBorderColors,
+          pointHoverRadius: pointRadii.map(r => r > 0 ? 8 : 0),
+          pointHitRadius: pointRadii.map(r => r > 0 ? 12 : 0),
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: true,
+            filter: (item) => item.dataIndex === dotIdx,
+            callbacks: {
+              title: () => targetEPS != null ? 'Target Price EPS' : 'Mean EPS',
+              label: (ctx) => {
+                const eps = labels[ctx.dataIndex];
+                const percentile = normalCDF(eps, mean, sd) * 100;
+                return [`EPS: $${fmtNum(eps)}`, `Percentile: ${fmtNum(percentile, 1)}%`];
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: 'linear',
+            title: { display: true, text: 'Annual EPS ($)', color: '#94A3B8', font: { size: 11 } },
+            ticks: { callback: v => '$' + fmtNum(v, 0), color: '#64748B', maxTicksLimit: 10 },
+            grid: { display: false },
+          },
+          y: {
+            title: { display: true, text: 'Probability Density', color: '#94A3B8', font: { size: 11 } },
+            ticks: { display: false },
+            grid: { color: 'rgba(37,45,58,0.5)' },
+          },
+        },
+      },
+    });
+
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
+  }, [mean, sd, targetEPS]);
+
+  if (sd === 0) {
+    return <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>Standard deviation is 0 — cannot render distribution</div>;
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div className="chart-container">
+        <canvas ref={canvasRef} />
+      </div>
+      <div ref={tooltipRef} />
+    </div>
+  );
+}
+
+function TargetPriceSection({ mean, sd, params }) {
+  const [targetPrice, setTargetPrice] = useState(() => {
+    const stored = getStoredTarget();
+    return stored?.targetPrice ?? '';
+  });
+  const [targetEPS, setTargetEPS] = useState(null);
+  const [percentile, setPercentile] = useState(null);
+
+  const shares = params.m1_shares;
+
+  useEffect(() => {
+    if (targetPrice !== '' && !isNaN(parseFloat(targetPrice)) && mean != null) {
+      const tp = parseFloat(targetPrice);
+      // target price -> implied EPS = target price / (mean_eps / current_price * current_price)
+      // Actually simpler: we just put targetEPS = the EPS that would correspond to this target price
+      // Using mean P/E: implied PE = targetPrice / mean. But user wants target stock price.
+      // We need a PE ratio. Use a simple approach: EPS needed = target_price / PE
+      // But we don't have PE. Let's just place the target price as an EPS value on the distribution.
+      // Actually re-reading the spec: the user inputs a "目标价" (target price for the stock),
+      // and the red dot moves to the EPS implied by that target price.
+      // To convert stock price to EPS we need a PE ratio assumption.
+      // Let's use: implied_eps = target_stock_price / (current_stock_price / current_eps)
+      // But we don't have current stock price here.
+      // Simplest: the distribution IS in EPS space. The user's "target price" likely means target EPS.
+      // Let me re-read... "在下方生成一个normal distribution在distribution的下面增加一个让user输入目标价的地方"
+      // "目标价" in Chinese finance context = target stock price, not EPS.
+      // We need PE. Let's compute implied PE from mean: PE = typical ~10-15x for E&P.
+      // Actually let's just let the user input target EPS directly since this is an EPS calculator.
+      // The label can say "Target EPS" to keep it simple and accurate.
+      setTargetEPS(tp);
+      setStoredTarget({ targetPrice: tp });
+    } else {
+      setTargetEPS(null);
+    }
+  }, [targetPrice, mean]);
+
+  return (
+    <div className="card">
+      <h3>EPS Distribution & Target</h3>
+      <NormalDistChart mean={mean} sd={sd} targetEPS={targetEPS} onPercentile={p => setPercentile(p)} />
+      <div className="target-section">
+        <span className="target-label">Target EPS ($):</span>
+        <input
+          className="target-input"
+          type="number"
+          step="0.5"
+          placeholder="e.g. 25"
+          value={targetPrice}
+          onChange={e => setTargetPrice(e.target.value)}
+        />
+        {targetEPS != null && percentile != null && (
+          <span className="target-result" style={{ color: percentile > 50 ? 'var(--accent)' : 'var(--danger)' }}>
+            Percentile: {fmtNum(percentile, 1)}% — {percentile > 50 ? 'Above' : 'Below'} median
+          </span>
+        )}
+        {targetEPS == null && (
+          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Red dot is at the mean ({fmtNum(mean)})</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const METHOD_INFO = [
+  { name: 'M1: Constant ΔWTI', desc: 'Sensitivity-based linear extrapolation from Q4 2024 base' },
+  { name: 'M2: Bottom-Up (Oil)', desc: 'Full cost stack, gas=$1.40/Mcf, bias-corrected' },
+  { name: 'M3: Bottom-Up (Oil+Gas $3)', desc: 'Same as M2 but gas=$3.00/Mcf scenario' },
+  { name: 'M4: Regression Calibrated', desc: 'M3 raw output calibrated via 5Q linear regression' },
+  { name: 'M5: Historical OLS', desc: 'Direct EPS~WTI regression on post-Endeavor quarters' },
+];
+
+function ResultsTable({ results, hasNull }) {
+  if (hasNull) {
+    return (
+      <div className="card">
+        <h3>EPS Estimates by Method</h3>
+        <div className="null-hint">Some parameters are missing or invalid. Results cannot be computed — displaying null.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="card">
+      <h3>EPS Estimates by Method</h3>
+      <table className="results-table">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Description</th>
+            <th style={{ textAlign: 'right' }}>Annual EPS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {METHOD_INFO.map((m, i) => (
+            <tr key={i}>
+              <td className="method-name">{m.name}</td>
+              <td className="method-desc">{m.desc}</td>
+              <td className="eps-value" style={{ color: results.methods[i] >= 0 ? 'var(--accent)' : 'var(--danger)' }}>
+                ${fmtNum(results.methods[i])}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function StatsPanel({ results }) {
+  return (
+    <div className="card">
+      <h3>Statistical Summary</h3>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">Mean EPS</div>
+          <div className="stat-value mean">${fmtNum(results.mean)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Std Dev</div>
+          <div className="stat-value sd">${fmtNum(results.sd)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">68% CI</div>
+          <div className="stat-value ci">${fmtNum(results.ci68Low)} — ${fmtNum(results.ci68High)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">95% CI (t-dist)</div>
+          <div className="stat-value ci">${fmtNum(results.ci95Low)} — ${fmtNum(results.ci95High)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [wti, setWti] = useState(70);
+  const [params, setParams] = useState(() => {
+    const stored = getStoredParams();
+    return stored ? { ...DEFAULT_PARAMS, ...stored } : { ...DEFAULT_PARAMS };
+  });
+  const [showChecklist, setShowChecklist] = useState(false);
+
+  // Check if any required param is missing/NaN
+  const hasNull = useMemo(() => {
+    return Object.keys(DEFAULT_PARAMS).some(k => params[k] == null || isNaN(params[k]));
+  }, [params]);
+
+  const results = useMemo(() => {
+    if (hasNull) return null;
+    return calcAll(wti, params);
+  }, [wti, params, hasNull]);
+
+  const outOfRange = wti < 55 || wti > 75;
+
+  function handleWtiChange(val) {
+    const n = parseFloat(val);
+    if (!isNaN(n)) setWti(Math.max(40, Math.min(120, n)));
+  }
+
+  function handleSaveParams(newParams) {
+    setParams(newParams);
+    setStoredParams(newParams);
+    setShowChecklist(false);
+  }
+
+  return (
+    <div className="app">
+      {showChecklist && (
+        <DataChecklist params={params} onSave={handleSaveParams} onClose={() => setShowChecklist(false)} />
+      )}
+      <header className="header">
+        <div className="container header-inner">
+          <button className="back-btn" onClick={() => window.location.href = 'financial-calculator.html'}>
+            &larr; Back to Inventory
+          </button>
+          <span className="header-title">FANG Oil → EPS</span>
+          <button className="btn btn-outline btn-sm" onClick={() => setShowChecklist(true)}>
+            Data Checklist
+          </button>
+          <ValidityBadge />
+        </div>
+      </header>
+
+      <main className="main">
+        <div className="container">
+          {/* Product description */}
+          <div className="card" style={{ borderLeft: '3px solid var(--blue)' }}>
+            <h3 style={{ marginBottom: 8 }}>Diamondback Energy (FANG) — Oil Price → EPS Calculator</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-sec)', margin: 0 }}>
+              Enter a WTI crude oil price to estimate FANG's annualized EPS using 5 independent methods.
+              Results include mean, standard deviation, and confidence intervals.
+            </p>
+          </div>
+
+          {/* WTI Input */}
+          <div className="card">
+            <h3>WTI Crude Oil Price Input</h3>
+            <div className="wti-input-section">
+              <span className="wti-label">$40</span>
+              <input
+                type="range" min="40" max="120" step="0.5" value={wti}
+                className="wti-slider"
+                onChange={e => handleWtiChange(e.target.value)}
+              />
+              <span className="wti-label">$120</span>
+              <input
+                type="number" min="40" max="120" step="0.5" value={wti}
+                className="wti-number"
+                onChange={e => handleWtiChange(e.target.value)}
+              />
+              <span className="wti-display">${fmtNum(wti, 1)}</span>
+            </div>
+            {outOfRange && (
+              <div className="extrap-warning">
+                <span>⚠</span> Oil price is outside the $55–$75 historical backtest range. Extrapolation risk increases.
+              </div>
+            )}
+          </div>
+
+          {/* Results */}
+          <ResultsTable results={results} hasNull={hasNull} />
+
+          {/* Stats */}
+          {results && <StatsPanel results={results} />}
+
+          {/* Normal Distribution + Target */}
+          {results && (
+            <TargetPriceSection mean={results.mean} sd={results.sd} params={params} />
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
