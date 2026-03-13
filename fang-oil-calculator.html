@@ -752,7 +752,7 @@ function TargetPriceSection({ mean, sd, df, params }) {
           <span style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 50, textAlign: 'right' }}>${fmtNum(sliderMin, 0)}</span>
           <input
             type="range"
-            min={sliderMin} max={sliderMax} step="0.1"
+            min={sliderMin} max={sliderMax} step="0.05"
             value={sliderVal}
             className="wti-slider"
             style={{ flex: 1 }}
