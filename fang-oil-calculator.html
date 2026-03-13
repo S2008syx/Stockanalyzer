@@ -712,6 +712,49 @@ const METHOD_INFO = [
   { name: 'M6: Barrel→Earnings Chain', desc: 'WTI→Margin→EPS chain (FY22-25 annual OLS)' },
 ];
 
+function DocModal({ onClose }) {
+  return (
+    <div className="checklist-overlay" onClick={onClose}>
+      <div className="checklist-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 760 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0 }}>Method Guide</h3>
+          <button className="btn btn-outline btn-sm" onClick={onClose}>Close</button>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.7 }}>
+          <p style={{ marginBottom: 12 }}>Input a WTI oil price → get 6 independent EPS estimates → pick which ones you trust → see mean, spread, and confidence interval.</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M1: Constant ΔWTI</h4>
+          <p>Starts from Q4 2024 actual EPS ($3.64/q), scales linearly by oil price difference. <strong>Sensitivity ≈ $0.43/bbl.</strong> Simple but assumes everything else stays constant.</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M2: Bottom-Up (Oil Only)</h4>
+          <p>Builds a full income statement: oil/NGL/gas revenue minus costs (LOE, GPT, G&A, DD&A, interest, taxes). Gas fixed at $1.40/Mcf. Bias-corrected ×0.848 from 5Q backtest.</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M3: Bottom-Up (Oil + Gas $3)</h4>
+          <p>Same as M2 but gas = $3.00/Mcf (geopolitical premium scenario). Adds ~$2/share annually vs M2. Bias correction = 0.861.</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M4: Regression Calibrated</h4>
+          <p>Takes M3's raw output and applies a calibration formula (<code>-1.464 + 1.290 × raw</code>) from 5Q actual-vs-predicted regression. Corrects for systematic model bias.</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M5: Historical OLS</h4>
+          <p>Direct regression of quarterly EPS on WTI from 5 post-Endeavor quarters. <code>EPS = (-8.49 + 0.178 × WTI) × 4</code>. R² = 0.94. Purely empirical, captures real-world effects.</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M6: Barrel→Earnings Chain</h4>
+          <p>Two-step annual regression (FY22–25): WTI→Margin (<code>0.70×WTI − 18.55</code>) → Margin→EPS (<code>0.47×Margin + 0.99</code>). Combined: <strong>~$3.30 EPS per $10/bbl WTI.</strong> Breakeven ≈ $23/bbl.</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>Statistics</h4>
+          <p><strong>Mean:</strong> average of selected methods. <strong>SD:</strong> how much they disagree. <strong>68% CI:</strong> mean ± 1 SD. <strong>95% CI:</strong> uses t-distribution (adjusts for small n).</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>PE → Stock Price</h4>
+          <p>12x = bear (oil dropping), 15x = base (flat), 18x = bull (oil rising). Stock Price = Mean EPS × PE.</p>
+
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>Limitations</h4>
+          <p>Small samples (4–5 data points). 2024 Endeavor merger changed cost structure &amp; share count. Linear assumptions. NGL/gas/hedging simplified. Not investment advice.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STORE_PE_KEY = 'fang_oil_pe';
 function getStoredPE() {
   try { const s = localStorage.getItem(STORE_PE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
@@ -953,6 +996,7 @@ function App() {
     return stored ? { ...DEFAULT_PARAMS, ...stored } : { ...DEFAULT_PARAMS };
   });
   const [showChecklist, setShowChecklist] = useState(false);
+  const [showDoc, setShowDoc] = useState(false);
   const numMethods = METHOD_INFO.length;
   const [selected, setSelected] = useState(() => {
     const stored = getStoredSelection();
@@ -1001,6 +1045,7 @@ function App() {
       {showChecklist && (
         <DataChecklist params={params} onSave={handleSaveParams} onClose={() => setShowChecklist(false)} />
       )}
+      {showDoc && <DocModal onClose={() => setShowDoc(false)} />}
       <header className="header">
         <div className="container header-inner">
           <button className="back-btn" onClick={() => window.location.href = 'financial-calculator.html'}>
@@ -1009,6 +1054,9 @@ function App() {
           <span className="header-title">FANG Oil → EPS</span>
           <button className="btn btn-outline btn-sm" onClick={() => setShowChecklist(true)}>
             Data Checklist
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={() => setShowDoc(true)}>
+            Documentation
           </button>
           <ValidityBadge />
         </div>
