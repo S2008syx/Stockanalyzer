@@ -358,19 +358,40 @@ function calcAll(wti, p) {
   const m3 = calcMethod3(wti, p);
   const m4 = calcMethod4(wti, p);
   const m5 = calcMethod5(wti, p);
-  const values = [m1, m2, m3, m4, m5];
+  return { methods: [m1, m2, m3, m4, m5] };
+}
 
-  const mean = values.reduce((a, b) => a + b, 0) / 5;
-  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / 4; // n-1
+// t-distribution critical values (97.5% quantile) by df
+const T_CRIT = { 1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228, 15: 2.131, 20: 2.086, 30: 2.042 };
+function tCritVal(df) {
+  if (T_CRIT[df]) return T_CRIT[df];
+  // interpolate or fallback to 1.96 for large df
+  if (df > 30) return 1.96;
+  const keys = Object.keys(T_CRIT).map(Number).sort((a,b) => a-b);
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (df > keys[i] && df < keys[i+1]) {
+      const frac = (df - keys[i]) / (keys[i+1] - keys[i]);
+      return T_CRIT[keys[i]] * (1 - frac) + T_CRIT[keys[i+1]] * frac;
+    }
+  }
+  return 1.96;
+}
+
+function calcStats(values) {
+  const n = values.length;
+  if (n === 0) return null;
+  if (n === 1) return { mean: values[0], sd: 0, ci68Low: values[0], ci68High: values[0], ci95Low: values[0], ci95High: values[0], n };
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / (n - 1);
   const sd = Math.sqrt(variance);
   const ci68Low = mean - sd;
   const ci68High = mean + sd;
-  const tVal = 2.776; // t-dist df=4, 97.5%
-  const se = sd / Math.sqrt(5);
+  const df = n - 1;
+  const tVal = tCritVal(df);
+  const se = sd / Math.sqrt(n);
   const ci95Low = mean - tVal * se;
   const ci95High = mean + tVal * se;
-
-  return { methods: [m1, m2, m3, m4, m5], mean, sd, ci68Low, ci68High, ci95Low, ci95High };
+  return { mean, sd, ci68Low, ci68High, ci95Low, ci95High, n };
 }
 
 // Normal distribution helpers
@@ -647,7 +668,35 @@ const METHOD_INFO = [
   { name: 'M5: Historical OLS', desc: 'Direct EPS~WTI regression on post-Endeavor quarters' },
 ];
 
-function ResultsTable({ results, hasNull }) {
+const STORE_SELECTION_KEY = 'fang_oil_selection';
+function getStoredSelection() {
+  try { const s = localStorage.getItem(STORE_SELECTION_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function setStoredSelection(sel) { localStorage.setItem(STORE_SELECTION_KEY, JSON.stringify(sel)); }
+
+function ResultsTable({ results, hasNull, selected, onSaveSelection }) {
+  const [checked, setChecked] = useState([...selected]);
+  const [error, setError] = useState(false);
+  const dirty = JSON.stringify(checked) !== JSON.stringify(selected);
+
+  function handleToggle(i) {
+    setChecked(prev => {
+      const next = [...prev];
+      next[i] = !next[i];
+      return next;
+    });
+    setError(false);
+  }
+
+  function handleSave() {
+    if (!checked.some(Boolean)) {
+      setError(true);
+      return;
+    }
+    setError(false);
+    onSaveSelection(checked);
+  }
+
   if (hasNull) {
     return (
       <div className="card">
@@ -658,10 +707,13 @@ function ResultsTable({ results, hasNull }) {
   }
   return (
     <div className="card">
-      <h3>EPS Estimates by Method</h3>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h3 style={{ margin: 0 }}>EPS Estimates by Method</h3>
+      </div>
       <table className="results-table">
         <thead>
           <tr>
+            <th style={{ width: 36 }}></th>
             <th>Method</th>
             <th>Description</th>
             <th style={{ textAlign: 'right' }}>Annual EPS</th>
@@ -669,7 +721,14 @@ function ResultsTable({ results, hasNull }) {
         </thead>
         <tbody>
           {METHOD_INFO.map((m, i) => (
-            <tr key={i}>
+            <tr key={i} style={{ opacity: checked[i] ? 1 : 0.5 }}>
+              <td>
+                <input
+                  type="checkbox" checked={checked[i]}
+                  onChange={() => handleToggle(i)}
+                  style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--accent)' }}
+                />
+              </td>
               <td className="method-name">{m.name}</td>
               <td className="method-desc">{m.desc}</td>
               <td className="eps-value" style={{ color: results.methods[i] >= 0 ? 'var(--accent)' : 'var(--danger)' }}>
@@ -679,30 +738,41 @@ function ResultsTable({ results, hasNull }) {
           ))}
         </tbody>
       </table>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
+        {error && <span style={{ fontSize: 12, color: 'var(--danger)' }}>You must choose at least one method</span>}
+        <button
+          className={`btn btn-sm ${error ? '' : 'btn-primary'}`}
+          style={error ? { background: 'var(--danger)', color: '#fff', border: 'none' } : {}}
+          onClick={handleSave}
+        >
+          {dirty ? 'Save Selection' : 'Saved'}
+        </button>
+      </div>
     </div>
   );
 }
 
-function StatsPanel({ results }) {
+function StatsPanel({ stats }) {
+  if (!stats) return null;
   return (
     <div className="card">
-      <h3>Statistical Summary</h3>
+      <h3>Statistical Summary <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-dim)' }}>(n={stats.n} method{stats.n > 1 ? 's' : ''} selected)</span></h3>
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-label">Mean EPS</div>
-          <div className="stat-value mean">${fmtNum(results.mean)}</div>
+          <div className="stat-value mean">${fmtNum(stats.mean)}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Std Dev</div>
-          <div className="stat-value sd">${fmtNum(results.sd)}</div>
+          <div className="stat-value sd">{stats.n > 1 ? '$' + fmtNum(stats.sd) : 'N/A (n=1)'}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">68% CI</div>
-          <div className="stat-value ci">${fmtNum(results.ci68Low)} — ${fmtNum(results.ci68High)}</div>
+          <div className="stat-value ci">{stats.n > 1 ? '$' + fmtNum(stats.ci68Low) + ' — $' + fmtNum(stats.ci68High) : 'N/A'}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">95% CI (t-dist)</div>
-          <div className="stat-value ci">${fmtNum(results.ci95Low)} — ${fmtNum(results.ci95High)}</div>
+          <div className="stat-label">95% CI (t, df={stats.n > 1 ? stats.n - 1 : '—'})</div>
+          <div className="stat-value ci">{stats.n > 1 ? '$' + fmtNum(stats.ci95Low) + ' — $' + fmtNum(stats.ci95High) : 'N/A'}</div>
         </div>
       </div>
     </div>
@@ -716,6 +786,12 @@ function App() {
     return stored ? { ...DEFAULT_PARAMS, ...stored } : { ...DEFAULT_PARAMS };
   });
   const [showChecklist, setShowChecklist] = useState(false);
+  const numMethods = METHOD_INFO.length;
+  const [selected, setSelected] = useState(() => {
+    const stored = getStoredSelection();
+    if (stored && stored.length === numMethods) return stored;
+    return Array(numMethods).fill(true);
+  });
 
   // Check if any required param is missing/NaN
   const hasNull = useMemo(() => {
@@ -726,6 +802,14 @@ function App() {
     if (hasNull) return null;
     return calcAll(wti, params);
   }, [wti, params, hasNull]);
+
+  // Stats based on selected methods only
+  const stats = useMemo(() => {
+    if (!results) return null;
+    const values = results.methods.filter((_, i) => selected[i]);
+    if (values.length === 0) return null;
+    return calcStats(values);
+  }, [results, selected]);
 
   const outOfRange = wti < 55 || wti > 75;
 
@@ -738,6 +822,11 @@ function App() {
     setParams(newParams);
     setStoredParams(newParams);
     setShowChecklist(false);
+  }
+
+  function handleSaveSelection(sel) {
+    setSelected(sel);
+    setStoredSelection(sel);
   }
 
   return (
@@ -764,8 +853,8 @@ function App() {
           <div className="card" style={{ borderLeft: '3px solid var(--blue)' }}>
             <h3 style={{ marginBottom: 8 }}>Diamondback Energy (FANG) — Oil Price → EPS Calculator</h3>
             <p style={{ fontSize: 13, color: 'var(--text-sec)', margin: 0 }}>
-              Enter a WTI crude oil price to estimate FANG's annualized EPS using 5 independent methods.
-              Results include mean, standard deviation, and confidence intervals.
+              Enter a WTI crude oil price to estimate FANG's annualized EPS using {numMethods} independent methods.
+              Select which methods to include in the statistical summary below.
             </p>
           </div>
 
@@ -795,14 +884,20 @@ function App() {
           </div>
 
           {/* Results */}
-          <ResultsTable results={results} hasNull={hasNull} />
+          <ResultsTable results={results} hasNull={hasNull} selected={selected} onSaveSelection={handleSaveSelection} />
 
           {/* Stats */}
-          {results && <StatsPanel results={results} />}
+          {stats && <StatsPanel stats={stats} />}
 
           {/* Normal Distribution + Target */}
-          {results && (
-            <TargetPriceSection mean={results.mean} sd={results.sd} params={params} />
+          {stats && stats.n > 1 && (
+            <TargetPriceSection mean={stats.mean} sd={stats.sd} params={params} />
+          )}
+          {stats && stats.n === 1 && (
+            <div className="card">
+              <h3>EPS Distribution & Target</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>Select at least 2 methods to generate the normal distribution chart.</p>
+            </div>
           )}
         </div>
       </main>
