@@ -710,7 +710,7 @@ function TDistChart({ mean, sd, df, targetEPS, onPercentile }) {
   );
 }
 
-function TargetPriceSection({ mean, sd, df, params }) {
+function TargetPriceSection({ mean, sd, df, params, targetEPS, onTargetChange }) {
   // Slider range: mean ± 4sd
   const sliderMin = Math.floor((mean - 4 * sd) * 2) / 2;
   const sliderMax = Math.ceil((mean + 4 * sd) * 2) / 2;
@@ -721,13 +721,17 @@ function TargetPriceSection({ mean, sd, df, params }) {
   });
   const [percentile, setPercentile] = useState(null);
 
-  const targetEPS = (targetPrice !== '' && !isNaN(parseFloat(targetPrice))) ? parseFloat(targetPrice) : null;
-
   // Persist
   useEffect(() => {
-    if (targetEPS != null) {
+    if (targetPrice !== '' && !isNaN(parseFloat(targetPrice))) {
       setStoredTarget({ targetPrice });
     }
+  }, [targetPrice]);
+
+  // Sync lifted state
+  useEffect(() => {
+    const v = (targetPrice !== '' && !isNaN(parseFloat(targetPrice))) ? parseFloat(targetPrice) : null;
+    onTargetChange(v);
   }, [targetPrice]);
 
   function handleSliderChange(val) {
@@ -850,7 +854,7 @@ const PE_PRESETS = [
   { pe: null, color: '#FBBF24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.4)', label: 'Custom', hint: 'Enter your own PE' },
 ];
 
-function PERatioSection({ meanEPS }) {
+function PERatioSection({ targetEPS, meanEPS }) {
   const [selectedIdx, setSelectedIdx] = useState(() => {
     const stored = getStoredPE();
     return stored?.idx ?? null;
@@ -859,40 +863,36 @@ function PERatioSection({ meanEPS }) {
     const stored = getStoredPE();
     return stored?.custom ?? '';
   });
-  const [saved, setSaved] = useState(() => {
-    const stored = getStoredPE();
-    return stored ?? null;
-  });
-  const [error, setError] = useState(false);
+
+  // Auto-save on selection change
+  useEffect(() => {
+    if (selectedIdx != null) {
+      const preset = PE_PRESETS[selectedIdx];
+      let peVal = preset.pe;
+      if (peVal == null) {
+        const parsed = parseFloat(customPE);
+        if (customPE && !isNaN(parsed) && parsed > 0) peVal = parsed;
+      }
+      if (peVal != null) {
+        setStoredPE({ idx: selectedIdx, custom: customPE, pe: peVal });
+      }
+    }
+  }, [selectedIdx, customPE]);
 
   function handleSelectCard(idx) {
     setSelectedIdx(idx);
-    setError(false);
   }
 
-  function handleSave() {
-    if (selectedIdx == null) {
-      setError(true);
-      return;
-    }
+  const activePE = (() => {
+    if (selectedIdx == null) return null;
     const preset = PE_PRESETS[selectedIdx];
-    let peVal = preset.pe;
-    if (peVal == null) {
-      const parsed = parseFloat(customPE);
-      if (!customPE || isNaN(parsed) || parsed <= 0) {
-        setError(true);
-        return;
-      }
-      peVal = parsed;
-    }
-    setError(false);
-    const data = { idx: selectedIdx, custom: customPE, pe: peVal };
-    setSaved(data);
-    setStoredPE(data);
-  }
+    if (preset.pe != null) return preset.pe;
+    const parsed = parseFloat(customPE);
+    return (!isNaN(parsed) && parsed > 0) ? parsed : null;
+  })();
 
-  const activePE = saved?.pe;
-  const stockPrice = activePE && meanEPS ? activePE * meanEPS : null;
+  const epsForPrice = targetEPS != null ? targetEPS : meanEPS;
+  const stockPrice = activePE && epsForPrice ? activePE * epsForPrice : null;
 
   return (
     <div className="card">
@@ -925,24 +925,15 @@ function PERatioSection({ meanEPS }) {
             min="1"
             placeholder="e.g. 20"
             value={customPE}
-            onChange={e => { setCustomPE(e.target.value); setError(false); }}
+            onChange={e => setCustomPE(e.target.value)}
             style={{ width: 100 }}
           />
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
-        {error && <span style={{ fontSize: 12, color: 'var(--danger)' }}>
-          {selectedIdx == null ? 'Please select a PE ratio' : 'Please enter a valid custom PE'}
-        </span>}
-        <button
-          className={`btn btn-sm ${error ? '' : 'btn-primary'}`}
-          style={error ? { background: 'var(--danger)', color: '#fff', border: 'none' } : {}}
-          onClick={handleSave}
-        >
-          Save
-        </button>
-      </div>
+      {selectedIdx == null && (
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>Select a PE ratio card above</div>
+      )}
 
       {/* Stock price result */}
       {stockPrice != null && (
@@ -951,7 +942,7 @@ function PERatioSection({ meanEPS }) {
             <div className="price-tag">${fmtNum(stockPrice, 2)}</div>
           </div>
           <div>
-            <div className="price-detail">Mean EPS: ${fmtNum(meanEPS)} × PE: {fmtNum(activePE, 1)}x</div>
+            <div className="price-detail">{targetEPS != null ? 'Target' : 'Mean'} EPS: ${fmtNum(epsForPrice)} × PE: {fmtNum(activePE, 1)}x</div>
             <div className="price-detail">Implied Stock Price = EPS × PE Multiple</div>
           </div>
         </div>
@@ -1085,6 +1076,11 @@ function App() {
     if (stored && stored.length === numMethods) return stored;
     return Array(numMethods).fill(true);
   });
+  const [targetEPS, setTargetEPS] = useState(() => {
+    const stored = getStoredTarget();
+    const v = stored?.targetPrice;
+    return (v !== '' && v != null && !isNaN(parseFloat(v))) ? parseFloat(v) : null;
+  });
 
   // Check if any required param is missing/NaN
   const hasNull = useMemo(() => {
@@ -1188,7 +1184,7 @@ function App() {
 
           {/* Normal Distribution + Target */}
           {stats && stats.n > 1 && (
-            <TargetPriceSection mean={stats.mean} sd={stats.sd} df={stats.n - 1} params={params} />
+            <TargetPriceSection mean={stats.mean} sd={stats.sd} df={stats.n - 1} params={params} targetEPS={targetEPS} onTargetChange={setTargetEPS} />
           )}
           {stats && stats.n === 1 && (
             <div className="card">
@@ -1198,7 +1194,7 @@ function App() {
           )}
 
           {/* PE Ratio & Stock Price */}
-          {stats && <PERatioSection meanEPS={stats.mean} />}
+          {stats && <PERatioSection targetEPS={targetEPS} meanEPS={stats.mean} />}
         </div>
       </main>
     </div>

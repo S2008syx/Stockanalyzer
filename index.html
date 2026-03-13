@@ -536,6 +536,7 @@ const CHECKLIST_ITEMS = [
   { key: 'geo', label: 'Revenue by Geographic Region', type: 'distribution' },
   { key: 'seg', label: 'Revenue by Business Segment', type: 'distribution' },
   { key: 'prices1y', label: '1Y Daily Price Data', type: 'priceSeries' },
+  { key: 'uso5y', label: '5Y Crude Oil ETF (USO)', type: 'priceSeries' },
   { key: 'sig5', label: 'Significant Days (>5% Change)', type: 'readonly' },
   { key: 'analystTarget', label: 'Analyst Target Price', type: 'readonly' },
   { key: 'analystRating', label: 'Analyst Rating', type: 'readonly' },
@@ -637,6 +638,13 @@ async function fetchHistoricalPrices(ticker, key) {
   const to = new Date().toISOString().slice(0, 10);
   const from = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
   const d = await fmpGet(`/historical-price-eod/full?symbol=${ticker}&from=${from}&to=${to}`, key);
+  return Array.isArray(d) ? d : (d && d.historical ? d.historical : []);
+}
+
+async function fetchUSO5Y(key) {
+  const to = new Date().toISOString().slice(0, 10);
+  const from = `${CURRENT_YEAR - 5}-01-01`;
+  const d = await fmpGet(`/historical-price-eod/full?symbol=USO&from=${from}&to=${to}`, key);
   return Array.isArray(d) ? d : (d && d.historical ? d.historical : []);
 }
 
@@ -764,6 +772,7 @@ async function fetchAllStockData(ticker, keys) {
     fetchSegRevenue(ticker, keys.fmp).then(d => results.seg = d).catch(e => { results.seg = null; errors.seg = e.message; }),
     fetchPriceTargetConsensus(ticker, keys.fmp, keys.finnhub).then(d => results.priceTarget = d).catch(e => { results.priceTarget = null; errors.priceTarget = e.message; }),
     fetchRatingConsensus(ticker, keys.fmp, keys.finnhub).then(d => results.rating = d).catch(e => { results.rating = null; errors.rating = e.message; }),
+    fetchUSO5Y(keys.fmp).then(d => results.uso5y = d).catch(e => { results.uso5y = []; errors.uso5y = e.message; }),
   ];
   await Promise.all(tasks);
   results._errors = errors;
@@ -1237,7 +1246,7 @@ function buildChecklist(rawData) {
     pe15: 'ratios', ps15: 'ratios',
     ebitda15: 'income', mktcap15: 'ev', netdebt15: 'ev', fcf15: 'cashflow', ocf15: 'cashflow',
     price: 'profile', eps: 'profile', shares: 'profile',
-    geo: 'geo', seg: 'seg', prices1y: 'prices1y', sig5: 'prices1y',
+    geo: 'geo', seg: 'seg', prices1y: 'prices1y', uso5y: 'uso5y', sig5: 'prices1y',
     analystTarget: 'priceTarget', analystRating: 'rating',
   };
 
@@ -1308,6 +1317,9 @@ function buildChecklist(rawData) {
   status.seg = { available: seg ? 1 : 0, total: 1, data: seg };
 
   status.prices1y = { available: prices1y.length > 0 ? 1 : 0, total: 1, data: prices1y };
+
+  const uso5y = rawData.uso5y || [];
+  status.uso5y = { available: uso5y.length > 0 ? 1 : 0, total: 1, data: uso5y };
 
   // Significant days (>5% change)
   const dailyChanges = calcDailyChanges(prices1y);
