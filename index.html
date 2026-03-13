@@ -524,6 +524,7 @@ const DATA_YEARS = 15;
 const CHECKLIST_ITEMS = [
   { key: 'pe15', label: '15Y PE Ratio History', type: 'history' },
   { key: 'ps15', label: '15Y PS Ratio History', type: 'history' },
+  { key: 'sales15', label: '15Y Revenue (Sales) History', type: 'history', fmt: 'big' },
   { key: 'ebitda15', label: '15Y EBITDA History', type: 'history', fmt: 'big' },
   { key: 'mktcap15', label: '15Y Market Cap History', type: 'history', fmt: 'big' },
   { key: 'fcf15', label: '15Y Free Cash Flow History', type: 'history', fmt: 'big' },
@@ -1243,7 +1244,7 @@ function buildChecklist(rawData) {
 
   // Map checklist keys to their data source error keys
   const errorSourceMap = {
-    pe15: 'ratios', ps15: 'ratios',
+    pe15: 'ratios', ps15: 'ratios', sales15: 'income',
     ebitda15: 'income', mktcap15: 'ev', netdebt15: 'ev', fcf15: 'cashflow', ocf15: 'cashflow',
     price: 'profile', eps: 'profile', shares: 'profile',
     geo: 'geo', seg: 'seg', prices1y: 'prices1y', uso5y: 'uso5y', sig5: 'prices1y',
@@ -1259,6 +1260,11 @@ function buildChecklist(rawData) {
 
   const psYears = buildYearSeries(ratios, 'priceToSalesRatio');
   status.ps15 = buildHistoryStatus(psYears, yearList);
+
+  const salesYears = income.map(d => ({
+    year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null), value: d.revenue
+  })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
+  status.sales15 = buildHistoryStatus(salesYears, yearList);
 
   const ebitdaYears = income.map(d => ({
     year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null), value: d.ebitda
@@ -3028,8 +3034,8 @@ function SupplementValuation({ evEbitda, epsSeries, psSeries, wcSeries, profitMa
               color="#7c3aed"
               formatFn={v => v != null ? fmtNum(v, 1) + 'x' : '-'}
             />
-            <HistoryChart title={`${tag} PS Ratio`} series={psSeries || []} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
             <HistoryChart title={`${tag} Revenue (Sales)`} series={salesSeries || []} yLabel="Revenue" color="#38BDF8" formatFn={v => '$' + fmtBigNum(v)} />
+            <HistoryChart title={`${tag} PS Ratio`} series={psSeries || []} yLabel="PS" color="#A78BFA" formatFn={v => fmtNum(v)} />
             {(wcSeries || []).length > 0 && (
               <HistoryChart
                 title={`${(wcSeries || []).length}Y Working Capital`}
@@ -3598,12 +3604,8 @@ function DetailPage({ stock, apiKeys: initialApiKeys, rawData, checklist, userIn
 
   // Sales (Revenue) series
   const salesSeries = useMemo(() => {
-    const income = rawData.income || [];
-    return income.map(d => ({
-      year: d.calendarYear || d.fiscalYear || (d.date ? d.date.slice(0, 4) : null),
-      value: d.revenue
-    })).filter(d => d.year && d.value != null).sort((a, b) => a.year.localeCompare(b.year));
-  }, [rawData]);
+    return mergeHistoryInputs(checklist.sales15?.data || [], 'sales15', v => v * 1e9);
+  }, [checklist, userInputs]);
 
   // Profit Margin series
   const profitMarginSeries = useMemo(() => {
