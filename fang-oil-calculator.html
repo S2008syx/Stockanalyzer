@@ -641,45 +641,57 @@ function NormalDistChart({ mean, sd, targetEPS, onPercentile }) {
 }
 
 function TargetPriceSection({ mean, sd, params }) {
+  // Slider range: mean ± 4sd
+  const sliderMin = Math.floor((mean - 4 * sd) * 2) / 2;
+  const sliderMax = Math.ceil((mean + 4 * sd) * 2) / 2;
+
   const [targetPrice, setTargetPrice] = useState(() => {
     const stored = getStoredTarget();
     return stored?.targetPrice ?? '';
   });
-  const [targetEPS, setTargetEPS] = useState(null);
   const [percentile, setPercentile] = useState(null);
 
-  const shares = params.m1_shares;
+  const targetEPS = (targetPrice !== '' && !isNaN(parseFloat(targetPrice))) ? parseFloat(targetPrice) : null;
 
+  // Persist
   useEffect(() => {
-    if (targetPrice !== '' && !isNaN(parseFloat(targetPrice)) && mean != null) {
-      const tp = parseFloat(targetPrice);
-      // target price -> implied EPS = target price / (mean_eps / current_price * current_price)
-      // Actually simpler: we just put targetEPS = the EPS that would correspond to this target price
-      // Using mean P/E: implied PE = targetPrice / mean. But user wants target stock price.
-      // We need a PE ratio. Use a simple approach: EPS needed = target_price / PE
-      // But we don't have PE. Let's just place the target price as an EPS value on the distribution.
-      // Actually re-reading the spec: the user inputs a "目标价" (target price for the stock),
-      // and the red dot moves to the EPS implied by that target price.
-      // To convert stock price to EPS we need a PE ratio assumption.
-      // Let's use: implied_eps = target_stock_price / (current_stock_price / current_eps)
-      // But we don't have current stock price here.
-      // Simplest: the distribution IS in EPS space. The user's "target price" likely means target EPS.
-      // Let me re-read... "在下方生成一个normal distribution在distribution的下面增加一个让user输入目标价的地方"
-      // "目标价" in Chinese finance context = target stock price, not EPS.
-      // We need PE. Let's compute implied PE from mean: PE = typical ~10-15x for E&P.
-      // Actually let's just let the user input target EPS directly since this is an EPS calculator.
-      // The label can say "Target EPS" to keep it simple and accurate.
-      setTargetEPS(tp);
-      setStoredTarget({ targetPrice: tp });
-    } else {
-      setTargetEPS(null);
+    if (targetEPS != null) {
+      setStoredTarget({ targetPrice });
     }
-  }, [targetPrice, mean]);
+  }, [targetPrice]);
+
+  function handleSliderChange(val) {
+    const v = parseFloat(val);
+    setTargetPrice(v.toFixed(1));
+  }
+
+  function handleInputChange(val) {
+    setTargetPrice(val);
+  }
+
+  // Clamp slider display value
+  const sliderVal = targetEPS != null ? Math.max(sliderMin, Math.min(sliderMax, targetEPS)) : mean;
 
   return (
     <div className="card">
       <h3>EPS Distribution & Target</h3>
       <NormalDistChart mean={mean} sd={sd} targetEPS={targetEPS} onPercentile={p => setPercentile(p)} />
+
+      <div style={{ marginTop: 16, padding: '0 4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 50, textAlign: 'right' }}>${fmtNum(sliderMin, 0)}</span>
+          <input
+            type="range"
+            min={sliderMin} max={sliderMax} step="0.1"
+            value={sliderVal}
+            className="wti-slider"
+            style={{ flex: 1 }}
+            onChange={e => handleSliderChange(e.target.value)}
+          />
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 50 }}>${fmtNum(sliderMax, 0)}</span>
+        </div>
+      </div>
+
       <div className="target-section">
         <span className="target-label">Target EPS ($):</span>
         <input
@@ -688,7 +700,7 @@ function TargetPriceSection({ mean, sd, params }) {
           step="0.5"
           placeholder="e.g. 25"
           value={targetPrice}
-          onChange={e => setTargetPrice(e.target.value)}
+          onChange={e => handleInputChange(e.target.value)}
         />
         {targetEPS != null && percentile != null && (
           <span className="target-result" style={{ color: percentile > 50 ? 'var(--accent)' : 'var(--danger)' }}>
@@ -696,7 +708,7 @@ function TargetPriceSection({ mean, sd, params }) {
           </span>
         )}
         {targetEPS == null && (
-          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Red dot is at the mean ({fmtNum(mean)})</span>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Drag the slider or enter a value — red dot follows the bell curve</span>
         )}
       </div>
     </div>
