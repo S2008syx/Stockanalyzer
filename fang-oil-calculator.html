@@ -174,9 +174,28 @@
       box-shadow: 0 4px 16px rgba(0,0,0,0.4);
     }
 
+    /* PE Ratio Cards */
+    .pe-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+    .pe-card {
+      border-radius: var(--radius-sm); padding: 16px; cursor: pointer;
+      transition: all 0.2s; text-align: center; border: 2px solid transparent;
+    }
+    .pe-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+    .pe-card.selected { border-color: #fff; }
+    .pe-card .pe-value { font-size: 24px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .pe-card .pe-label { font-size: 11px; font-weight: 600; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .pe-card .pe-hint { font-size: 10px; margin-top: 4px; opacity: 0.8; }
+    .pe-stock-price {
+      background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 16px 20px; margin-top: 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .pe-stock-price .price-tag { font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent); }
+    .pe-stock-price .price-detail { font-size: 12px; color: var(--text-sec); }
+
     @media (max-width: 768px) {
       .container { padding: 0 16px; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .pe-grid { grid-template-columns: repeat(2, 1fr); }
       .wti-input-section { flex-direction: column; align-items: stretch; }
     }
 
@@ -693,6 +712,129 @@ const METHOD_INFO = [
   { name: 'M6: Barrel→Earnings Chain', desc: 'WTI→Margin→EPS chain (FY22-25 annual OLS)' },
 ];
 
+const STORE_PE_KEY = 'fang_oil_pe';
+function getStoredPE() {
+  try { const s = localStorage.getItem(STORE_PE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function setStoredPE(pe) { localStorage.setItem(STORE_PE_KEY, JSON.stringify(pe)); }
+
+const PE_PRESETS = [
+  { pe: 12, color: '#94A3B8', bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.4)', label: 'Bear Case', hint: 'Oil price will drop' },
+  { pe: 15, color: '#60A5FA', bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.4)', label: 'Base Case', hint: 'Oil price stays flat' },
+  { pe: 18, color: '#4ADE80', bg: 'rgba(74,222,128,0.12)', border: 'rgba(74,222,128,0.4)', label: 'Bull Case', hint: 'Oil price will rise' },
+  { pe: null, color: '#FBBF24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.4)', label: 'Custom', hint: 'Enter your own PE' },
+];
+
+function PERatioSection({ meanEPS }) {
+  const [selectedIdx, setSelectedIdx] = useState(() => {
+    const stored = getStoredPE();
+    return stored?.idx ?? null;
+  });
+  const [customPE, setCustomPE] = useState(() => {
+    const stored = getStoredPE();
+    return stored?.custom ?? '';
+  });
+  const [saved, setSaved] = useState(() => {
+    const stored = getStoredPE();
+    return stored ?? null;
+  });
+  const [error, setError] = useState(false);
+
+  function handleSelectCard(idx) {
+    setSelectedIdx(idx);
+    setError(false);
+  }
+
+  function handleSave() {
+    if (selectedIdx == null) {
+      setError(true);
+      return;
+    }
+    const preset = PE_PRESETS[selectedIdx];
+    let peVal = preset.pe;
+    if (peVal == null) {
+      const parsed = parseFloat(customPE);
+      if (!customPE || isNaN(parsed) || parsed <= 0) {
+        setError(true);
+        return;
+      }
+      peVal = parsed;
+    }
+    setError(false);
+    const data = { idx: selectedIdx, custom: customPE, pe: peVal };
+    setSaved(data);
+    setStoredPE(data);
+  }
+
+  const activePE = saved?.pe;
+  const stockPrice = activePE && meanEPS ? activePE * meanEPS : null;
+
+  return (
+    <div className="card">
+      <h3>PE Ratio & Implied Stock Price</h3>
+      <div className="pe-grid">
+        {PE_PRESETS.map((p, i) => (
+          <div
+            key={i}
+            className={`pe-card${selectedIdx === i ? ' selected' : ''}`}
+            style={{ background: p.bg, borderColor: selectedIdx === i ? p.color : 'transparent' }}
+            onClick={() => handleSelectCard(i)}
+          >
+            <div className="pe-value" style={{ color: p.color }}>
+              {p.pe != null ? p.pe + 'x' : (customPE ? customPE + 'x' : '?x')}
+            </div>
+            <div className="pe-label" style={{ color: p.color }}>{p.label}</div>
+            <div className="pe-hint">{p.hint}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Custom PE input - shown when custom card is selected */}
+      {selectedIdx === 3 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-sec)' }}>Custom PE:</span>
+          <input
+            className="target-input"
+            type="number"
+            step="0.5"
+            min="1"
+            placeholder="e.g. 20"
+            value={customPE}
+            onChange={e => { setCustomPE(e.target.value); setError(false); }}
+            style={{ width: 100 }}
+          />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+        {error && <span style={{ fontSize: 12, color: 'var(--danger)' }}>
+          {selectedIdx == null ? 'Please select a PE ratio' : 'Please enter a valid custom PE'}
+        </span>}
+        <button
+          className={`btn btn-sm ${error ? '' : 'btn-primary'}`}
+          style={error ? { background: 'var(--danger)', color: '#fff', border: 'none' } : {}}
+          onClick={handleSave}
+        >
+          Save
+        </button>
+      </div>
+
+      {/* Stock price result */}
+      {stockPrice != null && (
+        <div className="pe-stock-price">
+          <div>
+            <div className="price-tag">${fmtNum(stockPrice, 2)}</div>
+          </div>
+          <div>
+            <div className="price-detail">Mean EPS: ${fmtNum(meanEPS)} × PE: {fmtNum(activePE, 1)}x</div>
+            <div className="price-detail">Implied Stock Price = EPS × PE Multiple</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const STORE_SELECTION_KEY = 'fang_oil_selection';
 function getStoredSelection() {
   try { const s = localStorage.getItem(STORE_SELECTION_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
@@ -924,6 +1066,9 @@ function App() {
               <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>Select at least 2 methods to generate the normal distribution chart.</p>
             </div>
           )}
+
+          {/* PE Ratio & Stock Price */}
+          {stats && <PERatioSection meanEPS={stats.mean} />}
         </div>
       </main>
     </div>
