@@ -248,7 +248,7 @@ const DEFAULT_PARAMS = {
 
   // Method 3 overrides
   m3_gas_price_fixed: 3.00,
-  m3_bias_correction: 0.861,
+  m3_bias_correction: 1,
 
   // Method 4
   m4_cal_intercept: -1.464,
@@ -299,9 +299,9 @@ const PARAM_META = [
   { key: 'm2_days_per_quarter', label: 'Days per Quarter' },
   { key: 'm2_bias_correction', label: 'Bias Correction', source: '5Q backtest' },
 
-  { section: 'Method 3: Bottom-Up (Oil + Gas $3)' },
-  { key: 'm3_gas_price_fixed', label: 'Gas Price ($/Mcf)', source: 'Assumed $3' },
-  { key: 'm3_bias_correction', label: 'Bias Correction', source: '5Q backtest' },
+  { section: 'Method 3: Bottom-Up (Oil + Gas)' },
+  { key: 'm3_gas_price_fixed', label: 'Gas Price ($/Mcf)', source: 'Default $3, editable' },
+  { key: 'm3_bias_correction', label: 'Bias Correction', source: 'Default 1 (no correction), editable' },
 
   { section: 'Method 4: Regression Calibrated' },
   { key: 'm4_cal_intercept', label: 'Calibration Intercept', source: '5Q regression' },
@@ -789,16 +789,23 @@ function TargetPriceSection({ mean, sd, df, params, targetEPS, onTargetChange })
   );
 }
 
-const METHOD_INFO = [
-  { name: 'M1: Constant ΔWTI', desc: 'Sensitivity-based linear extrapolation from Q4 2024 base' },
-  { name: 'M2: Bottom-Up (Oil)', desc: 'Full cost stack, gas=$1.40/Mcf, bias-corrected' },
-  { name: 'M3: Bottom-Up (Oil+Gas $3)', desc: 'Same as M2 but gas=$3.00/Mcf scenario' },
-  { name: 'M4: Regression Calibrated', desc: 'M3 raw output calibrated via 5Q linear regression' },
-  { name: 'M5: Historical OLS', desc: 'Direct EPS~WTI regression on post-Endeavor quarters' },
-  { name: 'M6: Barrel→Earnings Chain', desc: 'WTI→Margin→EPS chain (FY22-25 annual OLS)' },
-];
+function getMethodInfo(params) {
+  const gasPrice = params ? params.m3_gas_price_fixed : 3.00;
+  const gasStr = '$' + (Number.isInteger(gasPrice) ? gasPrice : gasPrice.toFixed(2));
+  return [
+    { name: 'M1: Constant ΔWTI', desc: 'Sensitivity-based linear extrapolation from Q4 2024 base' },
+    { name: 'M2: Bottom-Up (Oil)', desc: 'Full cost stack, gas=$1.40/Mcf, bias-corrected' },
+    { name: `M3: Bottom-Up (Oil+Gas ${gasStr})`, desc: `Same as M2 but gas=${gasStr}/Mcf scenario` },
+    { name: 'M4: Regression Calibrated', desc: 'M3 raw output calibrated via 5Q linear regression' },
+    { name: 'M5: Historical OLS', desc: 'Direct EPS~WTI regression on post-Endeavor quarters' },
+    { name: 'M6: Barrel→Earnings Chain', desc: 'WTI→Margin→EPS chain (FY22-25 annual OLS)' },
+  ];
+}
 
-function DocModal({ onClose }) {
+function DocModal({ onClose, params }) {
+  const gasPrice = params ? params.m3_gas_price_fixed : 3.00;
+  const gasStr = '$' + (Number.isInteger(gasPrice) ? gasPrice : gasPrice.toFixed(2));
+  const biasVal = params ? params.m3_bias_correction : 1;
   return (
     <div className="checklist-overlay" onClick={onClose}>
       <div className="checklist-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 760 }}>
@@ -815,8 +822,8 @@ function DocModal({ onClose }) {
           <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M2: Bottom-Up (Oil Only)</h4>
           <p>Builds a full income statement: oil/NGL/gas revenue minus costs (LOE, GPT, G&A, DD&A, interest, taxes). Gas fixed at $1.40/Mcf. Bias-corrected ×0.848 from 5Q backtest.</p>
 
-          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M3: Bottom-Up (Oil + Gas $3)</h4>
-          <p>Same as M2 but gas = $3.00/Mcf (geopolitical premium scenario). Adds ~$2/share annually vs M2. Bias correction = 0.861.</p>
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M3: Bottom-Up (Oil + Gas {gasStr})</h4>
+          <p>Same as M2 but gas = {gasStr}/Mcf (editable, default $3). Bias correction = {biasVal} (editable, default 1 = no correction).</p>
 
           <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M4: Regression Calibrated</h4>
           <p>Takes M3's raw output and applies a calibration formula (<code>-1.464 + 1.290 × raw</code>) from 5Q actual-vs-predicted regression. Corrects for systematic model bias.</p>
@@ -957,7 +964,8 @@ function getStoredSelection() {
 }
 function setStoredSelection(sel) { localStorage.setItem(STORE_SELECTION_KEY, JSON.stringify(sel)); }
 
-function ResultsTable({ results, hasNull, selected, onSaveSelection }) {
+function ResultsTable({ results, hasNull, selected, onSaveSelection, params }) {
+  const methodInfo = useMemo(() => getMethodInfo(params), [params]);
   const [checked, setChecked] = useState([...selected]);
   const [error, setError] = useState(false);
   const dirty = JSON.stringify(checked) !== JSON.stringify(selected);
@@ -1003,7 +1011,7 @@ function ResultsTable({ results, hasNull, selected, onSaveSelection }) {
           </tr>
         </thead>
         <tbody>
-          {METHOD_INFO.map((m, i) => (
+          {methodInfo.map((m, i) => (
             <tr key={i} style={{ opacity: checked[i] ? 1 : 0.5 }}>
               <td>
                 <input
@@ -1070,7 +1078,7 @@ function App() {
   });
   const [showChecklist, setShowChecklist] = useState(false);
   const [showDoc, setShowDoc] = useState(false);
-  const numMethods = METHOD_INFO.length;
+  const numMethods = 6;
   const [selected, setSelected] = useState(() => {
     const stored = getStoredSelection();
     if (stored && stored.length === numMethods) return stored;
@@ -1123,7 +1131,7 @@ function App() {
       {showChecklist && (
         <DataChecklist params={params} onSave={handleSaveParams} onClose={() => setShowChecklist(false)} />
       )}
-      {showDoc && <DocModal onClose={() => setShowDoc(false)} />}
+      {showDoc && <DocModal onClose={() => setShowDoc(false)} params={params} />}
       <header className="header">
         <div className="container header-inner">
           <button className="back-btn" onClick={() => window.location.href = 'financial-calculator.html'}>
@@ -1177,7 +1185,7 @@ function App() {
           </div>
 
           {/* Results */}
-          <ResultsTable results={results} hasNull={hasNull} selected={selected} onSaveSelection={handleSaveSelection} />
+          <ResultsTable results={results} hasNull={hasNull} selected={selected} onSaveSelection={handleSaveSelection} params={params} />
 
           {/* Stats */}
           {stats && <StatsPanel stats={stats} />}

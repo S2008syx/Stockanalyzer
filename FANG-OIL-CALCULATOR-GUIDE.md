@@ -54,15 +54,15 @@ annual_eps = (3.64 × 4) + sensitivity × (your_WTI - 70.3)
 
 ---
 
-### M3: Bottom-Up Cost Stack (Oil + Gas $3)
+### M3: Bottom-Up Cost Stack (Oil + Gas)
 
-**Idea:** Identical to M2, but assumes gas prices rise to $3.00/Mcf (a "geopolitical premium" scenario where Middle East tensions push gas higher).
+**Idea:** Identical to M2, but with a user-configurable gas price (default $3.00/Mcf). The label and description update dynamically to reflect the current gas price setting.
 
 **Differences from M2:**
-- Gas price: $3.00/Mcf instead of $1.40/Mcf
-- Bias correction: 0.861 instead of 0.848 (slightly different backtest fit when gas varies)
+- Gas price: editable, default $3.00/Mcf (instead of M2's fixed $1.40/Mcf)
+- Bias correction: editable, default 1 (no correction). Previously hardcoded at 0.861.
 
-**Why it matters:** At $3/Mcf gas, FANG earns ~$2/share more annually than at $1.40/Mcf. This method captures the upside if gas prices normalize higher.
+**Why it matters:** Lets you model any gas price scenario. At $3/Mcf gas, FANG earns ~$2/share more annually than at $1.40/Mcf. Adjusting the gas price and bias lets you explore different assumptions.
 
 ---
 

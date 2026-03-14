@@ -176,7 +176,7 @@
 |------|------|----------|
 | M1 | Constant ΔWTI | 基于 Q4 2024 基线的线性敏感性外推（~$0.43/桶）|
 | M2 | Bottom-Up (Oil Only) | 全成本堆叠季度损益模型，Gas=$1.40/Mcf，偏差修正 0.848 |
-| M3 | Bottom-Up (Oil+Gas $3) | 同 M2 但 Gas=$3.00 场景（地缘溢价），偏差修正 0.861 |
+| M3 | Bottom-Up (Oil+Gas) | 同 M2 但 Gas 价格可编辑（默认 $3.00/Mcf），偏差修正可编辑（默认 1 = 无修正）。标签随 Gas 价格动态变化 |
 | M4 | Regression Calibrated | 对 M3 原始输出做校准回归：-1.464 + 1.290 × rawQ |
 | M5 | Historical OLS | 纯经验回归：qEPS = -8.490 + 0.1779 × WTI，R²=0.94 |
 | M6 | Barrel→Earnings Chain | 两步年度回归：WTI→Margin→EPS，~$3.30 EPS/每$10油价 |
