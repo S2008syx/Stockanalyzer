@@ -179,9 +179,9 @@ Four PE scenarios to convert EPS into an implied stock price:
 
 | Card | PE | Scenario | Rationale |
 |------|------|----------|-----------|
-| **Grey** | 12x | Bear case | Oil prices expected to drop; market assigns lower multiple to cyclical earnings |
-| **Blue** | 15x | Base case | Oil prices stay around current levels; fair value multiple for E&P |
-| **Green** | 18x | Bull case | Oil prices expected to rise; market pays premium for growing earnings |
+| **Grey** | 8x | Bear case | Oil prices expected to drop; market assigns lower multiple to cyclical earnings |
+| **Blue** | 10x | Base case | Oil prices stay around current levels; fair value multiple for E&P |
+| **Green** | 12x | Bull case | Oil prices expected to rise; market pays premium for growing earnings |
 | **Yellow** | Custom | Your call | Enter any PE ratio you think is appropriate |
 
 **Implied Stock Price = Mean EPS × PE Multiple**
