@@ -181,8 +181,13 @@
 | M5 | Historical OLS | 纯经验回归：qEPS = -8.490 + 0.1779 × WTI，R²=0.94 |
 | M6 | Barrel→Earnings Chain | 两步年度回归：WTI→Margin→EPS，~$3.30 EPS/每$10油价 |
 
+#### 可编辑性标识
+每个方法旁显示一个徽章：
+* **M1–M4**：绿色 **Data Editable** — 参数可在 Data Checklist 中编辑
+* **M5–M6**：红色 **Data Ineditable** — 参数为历史回归结果，不可编辑（Data Checklist 中显示但输入框禁用）
+
 #### 输出展示
-* **结果表格**：6 种方法各自的年化 EPS 估算值（正值绿色，负值红色）。
+* **结果表格**：6 种方法各自的年化 EPS 估算值（正值绿色，负值红色）。方法名称旁标注 Data Editable/Ineditable 徽章。
 * **统计汇总面板**（4 卡片）：
    * Mean EPS（均值）
    * Std Dev（标准差，n=1 时显示 N/A）
@@ -192,7 +197,7 @@
 * **隐含股价**：Mean/Target EPS × 选定 PE = 隐含股价（绿色大字显示）。
 
 #### 特色功能
-* **Data Checklist 弹窗**：可编辑全部 62 个底层参数（含数据来源标注：10-K、10-Q、EIA 等），支持一键重置默认值。
+* **Data Checklist 弹窗**：显示全部底层参数（含数据来源标注：10-K、10-Q、EIA 等）。M1–M4 参数可编辑，M5–M6 参数为只读（灰色禁用），支持一键重置默认值。
 * **Documentation 弹窗**：完整方法论文档，含公式、敏感性分析和局限性说明。
 * **有效期徽章**：绿色 "Data valid before YYYY/MM/DD" 或红色 "Data expired"，基于下一财报日判断参数是否需要更新。
 * **全状态持久化**：油价、方法选择、Target EPS、PE 选择、62 个参数均保存至 localStorage。

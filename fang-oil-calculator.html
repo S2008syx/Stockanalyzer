@@ -89,6 +89,9 @@
     .results-table .method-desc { color: var(--text-sec); font-size: 12px; }
     .results-table .eps-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 15px; text-align: right; }
     .results-table .eps-null { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--warn); text-align: right; }
+    .method-badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 3px; margin-left: 8px; vertical-align: middle; letter-spacing: 0.3px; }
+    .method-badge-editable { background: rgba(74,222,128,0.15); color: #4ADE80; border: 1px solid rgba(74,222,128,0.3); }
+    .method-badge-ineditable { background: rgba(248,113,113,0.15); color: #F87171; border: 1px solid rgba(248,113,113,0.3); }
 
     /* Stats section */
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
@@ -308,18 +311,18 @@ const PARAM_META = [
   { key: 'm4_cal_slope', label: 'Calibration Slope', source: '5Q regression' },
   { key: 'm4_gas_price_fixed', label: 'Gas Price ($/Mcf)' },
 
-  { section: 'Method 5: Historical OLS Regression' },
-  { key: 'm5_reg_intercept', label: 'Regression Intercept', source: 'Post-Endeavor OLS' },
-  { key: 'm5_reg_slope', label: 'Regression Slope', source: 'Post-Endeavor OLS' },
-  { key: 'm5_r_squared', label: 'R²', source: 'Post-Endeavor OLS' },
+  { section: 'Method 5: Historical OLS Regression', readonly: true },
+  { key: 'm5_reg_intercept', label: 'Regression Intercept', source: 'Post-Endeavor OLS', readonly: true },
+  { key: 'm5_reg_slope', label: 'Regression Slope', source: 'Post-Endeavor OLS', readonly: true },
+  { key: 'm5_r_squared', label: 'R²', source: 'Post-Endeavor OLS', readonly: true },
 
-  { section: 'Method 6: Barrel-to-Earnings Chain' },
-  { key: 'm6_margin_slope', label: 'Model I Slope (WTI→Margin)', source: 'FY22-25 OLS, R²=0.87' },
-  { key: 'm6_margin_intercept', label: 'Model I Intercept', source: 'FY22-25 OLS' },
-  { key: 'm6_margin_r2', label: 'Model I R²', source: 'FY22-25 OLS' },
-  { key: 'm6_eps_slope', label: 'Model II Slope (Margin→EPS)', source: 'FY22-25 OLS, R²=0.88' },
-  { key: 'm6_eps_intercept', label: 'Model II Intercept', source: 'FY22-25 OLS' },
-  { key: 'm6_eps_r2', label: 'Model II R²', source: 'FY22-25 OLS' },
+  { section: 'Method 6: Barrel-to-Earnings Chain', readonly: true },
+  { key: 'm6_margin_slope', label: 'Model I Slope (WTI→Margin)', source: 'FY22-25 OLS, R²=0.87', readonly: true },
+  { key: 'm6_margin_intercept', label: 'Model I Intercept', source: 'FY22-25 OLS', readonly: true },
+  { key: 'm6_margin_r2', label: 'Model I R²', source: 'FY22-25 OLS', readonly: true },
+  { key: 'm6_eps_slope', label: 'Model II Slope (Margin→EPS)', source: 'FY22-25 OLS, R²=0.88', readonly: true },
+  { key: 'm6_eps_intercept', label: 'Model II Intercept', source: 'FY22-25 OLS', readonly: true },
+  { key: 'm6_eps_r2', label: 'Model II R²', source: 'FY22-25 OLS', readonly: true },
 ];
 
 // ============================================================
@@ -571,11 +574,16 @@ function DataChecklist({ params, onSave, onClose }) {
         </p>
         {PARAM_META.map((item, i) => {
           if (item.section) {
-            return <div key={i} className="cl-section-title">{item.section}</div>;
+            return (
+              <div key={i} className="cl-section-title">
+                {item.section}
+                {item.readonly && <span className="method-badge method-badge-ineditable" style={{ marginLeft: 8 }}>Ineditable</span>}
+              </div>
+            );
           }
           const val = local[item.key];
           return (
-            <div key={item.key} className="cl-item">
+            <div key={item.key} className="cl-item" style={item.readonly ? { opacity: 0.5 } : undefined}>
               <div className="cl-label">
                 {item.label}
                 {item.source && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 6 }}>({item.source})</span>}
@@ -584,6 +592,8 @@ function DataChecklist({ params, onSave, onClose }) {
                 className="cl-input"
                 value={val ?? ''}
                 onChange={e => handleChange(item.key, e.target.value)}
+                disabled={item.readonly}
+                style={item.readonly ? { cursor: 'not-allowed', background: 'rgba(255,255,255,0.03)' } : undefined}
               />
             </div>
           );
@@ -828,11 +838,11 @@ function DocModal({ onClose, params }) {
           <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M4: Regression Calibrated</h4>
           <p>Takes M3's raw output and applies a calibration formula (<code>-1.464 + 1.290 × raw</code>) from 5Q actual-vs-predicted regression. Corrects for systematic model bias.</p>
 
-          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M5: Historical OLS</h4>
-          <p>Direct regression of quarterly EPS on WTI from 5 post-Endeavor quarters. <code>EPS = (-8.49 + 0.178 × WTI) × 4</code>. R² = 0.94. Purely empirical, captures real-world effects.</p>
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M5: Historical OLS <span className="method-badge method-badge-ineditable">Data Ineditable</span></h4>
+          <p>Direct regression of quarterly EPS on WTI from 5 post-Endeavor quarters. <code>EPS = (-8.49 + 0.178 × WTI) × 4</code>. R² = 0.94. Purely empirical, captures real-world effects. Parameters are regression outputs and cannot be edited.</p>
 
-          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M6: Barrel→Earnings Chain</h4>
-          <p>Two-step annual regression (FY22–25): WTI→Margin (<code>0.70×WTI − 18.55</code>) → Margin→EPS (<code>0.47×Margin + 0.99</code>). Combined: <strong>~$3.30 EPS per $10/bbl WTI.</strong> Breakeven ≈ $23/bbl.</p>
+          <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>M6: Barrel→Earnings Chain <span className="method-badge method-badge-ineditable">Data Ineditable</span></h4>
+          <p>Two-step annual regression (FY22–25): WTI→Margin (<code>0.70×WTI − 18.55</code>) → Margin→EPS (<code>0.47×Margin + 0.99</code>). Combined: <strong>~$3.30 EPS per $10/bbl WTI.</strong> Breakeven ≈ $23/bbl. Parameters are regression outputs and cannot be edited.</p>
 
           <h4 style={{ color: 'var(--text)', fontSize: 14, margin: '16px 0 6px' }}>Statistics & Distribution</h4>
           <p><strong>Mean:</strong> average of selected methods. <strong>SD:</strong> how much they disagree. <strong>68% CI:</strong> mean ± 1 SD. <strong>95% CI:</strong> uses t-distribution (df = n−1). The bell curve chart is a <strong>Student's t-distribution</strong> (not normal) because n is small (2–6). It has heavier tails than a Gaussian, reflecting greater uncertainty with few data points. The df (degrees of freedom) adjusts automatically as you select/deselect methods.</p>
@@ -1020,7 +1030,12 @@ function ResultsTable({ results, hasNull, selected, onSaveSelection, params }) {
                   style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--accent)' }}
                 />
               </td>
-              <td className="method-name">{m.name}</td>
+              <td className="method-name">
+                {m.name}
+                <span className={`method-badge ${i < 4 ? 'method-badge-editable' : 'method-badge-ineditable'}`}>
+                  {i < 4 ? 'Data Editable' : 'Data Ineditable'}
+                </span>
+              </td>
               <td className="method-desc">{m.desc}</td>
               <td className="eps-value" style={{ color: results.methods[i] >= 0 ? 'var(--accent)' : 'var(--danger)' }}>
                 ${fmtNum(results.methods[i])}

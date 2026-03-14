@@ -128,6 +128,19 @@ Every $10/bbl change in WTI → ~$3.30 change in annual EPS.
 
 ---
 
+## Data Editable vs Ineditable
+
+Each method displays a badge indicating whether its underlying parameters can be modified:
+
+| Methods | Badge | Meaning |
+|---------|-------|---------|
+| **M1–M4** | **Data Editable** (green) | Parameters can be edited in the Data Checklist. Adjust assumptions like gas price, bias correction, production volumes, etc. |
+| **M5–M6** | **Data Ineditable** (red) | Parameters are derived from historical regression and cannot be edited. They are displayed in the Data Checklist for reference but inputs are disabled. |
+
+**Why?** M5 and M6 are purely empirical models fitted to historical data. Their coefficients (slopes, intercepts, R²) are fixed regression outputs — editing them would break the statistical validity of the model. M1–M4 use assumption-based inputs that legitimately vary with market conditions.
+
+---
+
 ## Statistical Summary
 
 After you select which methods to include, the calculator computes:
