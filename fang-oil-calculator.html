@@ -195,11 +195,40 @@
     .pe-stock-price .price-tag { font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent); }
     .pe-stock-price .price-detail { font-size: 12px; color: var(--text-sec); }
 
+    /* Sensitivity Panel */
+    .sens-panel { display: flex; gap: 16px; align-items: stretch; }
+    .sens-chart-wrap { flex: 1; min-width: 0; position: relative; height: 320px; }
+    .sens-right { display: flex; gap: 12px; flex-shrink: 0; }
+    .sens-boxes { display: flex; flex-direction: column; gap: 6px; width: 170px; }
+    .sens-box {
+      padding: 10px 12px; border-radius: var(--radius-sm); cursor: pointer;
+      border: 2px solid var(--border); background: var(--bg-raised); transition: all 0.15s;
+    }
+    .sens-box:hover { border-color: var(--border-hover); }
+    .sens-box.active { border-color: var(--blue); background: rgba(96,165,250,0.08); }
+    .sens-box-label { font-size: 11px; font-weight: 600; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.3px; }
+    .sens-box-value { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text); margin-top: 2px; }
+    .sens-box.active .sens-box-value { color: var(--blue); }
+    .sens-slider-col { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 48px; }
+    .sens-slider-label { font-size: 11px; font-weight: 600; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+    .sens-vslider {
+      writing-mode: vertical-lr; direction: rtl;
+      width: 32px; flex: 1; accent-color: var(--blue); cursor: pointer;
+    }
+    .sens-btn-row { display: flex; gap: 6px; margin-top: 8px; }
+
     @media (max-width: 768px) {
       .container { padding: 0 16px; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .pe-grid { grid-template-columns: repeat(2, 1fr); }
       .wti-input-section { flex-direction: column; align-items: stretch; }
+      .sens-panel { flex-direction: column; }
+      .sens-chart-wrap { height: 260px; }
+      .sens-right { flex-direction: row; }
+      .sens-boxes { flex-direction: row; width: auto; flex-wrap: wrap; }
+      .sens-box { flex: 1; min-width: 120px; }
+      .sens-slider-col { flex-direction: row; width: auto; }
+      .sens-vslider { writing-mode: horizontal-tb; direction: ltr; width: 100%; height: 32px; flex: 1; }
     }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -1058,6 +1087,216 @@ function ResultsTable({ results, hasNull, selected, onSaveSelection, params }) {
   );
 }
 
+const SENS_ITEMS = [
+  { key: 'ngl_ratio', label: 'NGL/WTI Ratio', paramKey: 'm2_ngl_to_wti_ratio', min: 0.20, max: 0.40, step: 0.005, fmt: v => v.toFixed(3) },
+  { key: 'gas_price', label: 'Gas Price $/Mcf', paramKey: 'm2_gas_price_fixed', min: 0.00, max: 4.00, step: 0.05, fmt: v => '$' + v.toFixed(2) },
+  { key: 'oil_prod', label: 'Oil Prod kbpd', paramKey: 'm2_oil_kbpd', min: 450, max: 550, step: 1, fmt: v => v.toFixed(0) },
+  { key: 'dda', label: 'DD&A $/BOE', paramKey: 'm2_DDA', min: 12, max: 18, step: 0.1, fmt: v => '$' + v.toFixed(1) },
+  { key: 'bias', label: 'Bias Correction', paramKey: 'm2_bias_correction', min: 0.70, max: 1.10, step: 0.005, fmt: v => v.toFixed(3) },
+];
+
+function SensitivityPanel({ wti, params, selected, onSaveParams }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [tempOverrides, setTempOverrides] = useState({});
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+
+  // Build effective params: base params + temp overrides
+  const effectiveParams = useMemo(() => {
+    const p = { ...params };
+    for (const [paramKey, val] of Object.entries(tempOverrides)) {
+      p[paramKey] = val;
+      // Sync related params
+      if (paramKey === 'm2_gas_price_fixed') {
+        p.m3_gas_price_fixed = val;
+        p.m4_gas_price_fixed = val;
+      }
+      if (paramKey === 'm2_bias_correction') {
+        p.m3_bias_correction = val;
+      }
+      if (paramKey === 'm2_oil_kbpd') {
+        p.m1_oil_prod_bpd = val * 1000;
+      }
+    }
+    return p;
+  }, [params, tempOverrides]);
+
+  // Current value for active item
+  const activeItem = SENS_ITEMS[activeIdx];
+  const currentVal = tempOverrides[activeItem.paramKey] ?? effectiveParams[activeItem.paramKey];
+
+  function handleSliderChange(val) {
+    const num = parseFloat(val);
+    setTempOverrides(prev => ({ ...prev, [activeItem.paramKey]: num }));
+  }
+
+  function handleReset() {
+    setTempOverrides(prev => {
+      const next = { ...prev };
+      delete next[activeItem.paramKey];
+      return next;
+    });
+  }
+
+  function handleSave() {
+    const newParams = { ...params };
+    const paramKey = activeItem.paramKey;
+    const val = tempOverrides[paramKey];
+    if (val == null) return;
+    newParams[paramKey] = val;
+    if (paramKey === 'm2_gas_price_fixed') {
+      newParams.m3_gas_price_fixed = val;
+      newParams.m4_gas_price_fixed = val;
+    }
+    if (paramKey === 'm2_bias_correction') {
+      newParams.m3_bias_correction = val;
+    }
+    if (paramKey === 'm2_oil_kbpd') {
+      newParams.m1_oil_prod_bpd = val * 1000;
+    }
+    onSaveParams(newParams);
+    setTempOverrides(prev => {
+      const next = { ...prev };
+      delete next[paramKey];
+      return next;
+    });
+  }
+
+  // Draw regression lines
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (chartRef.current) chartRef.current.destroy();
+
+    const wtiPoints = [];
+    for (let w = 40; w <= 120; w += 2) wtiPoints.push(w);
+
+    const colors = ['#94A3B8', '#60A5FA', '#4ADE80', '#A78BFA', '#FB923C', '#F472B6'];
+    const names = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
+    const calcFns = [calcMethod1, calcMethod2, calcMethod3, calcMethod4, calcMethod5, calcMethod6];
+
+    const datasets = calcFns.map((fn, i) => ({
+      label: names[i],
+      data: wtiPoints.map(w => ({ x: w, y: fn(w, effectiveParams) })),
+      borderColor: colors[i],
+      backgroundColor: colors[i],
+      borderWidth: selected[i] ? 2.5 : 1,
+      borderDash: selected[i] ? [] : [4, 4],
+      pointRadius: 0,
+      tension: 0.1,
+      showLine: true,
+    }));
+
+    // Add vertical line for current WTI
+    const allY = datasets.flatMap(d => d.data.map(p => p.y));
+    const yMin = Math.min(...allY);
+    const yMax = Math.max(...allY);
+
+    datasets.push({
+      label: 'Current WTI',
+      data: [{ x: wti, y: yMin - 5 }, { x: wti, y: yMax + 5 }],
+      borderColor: 'rgba(251,191,36,0.6)',
+      borderWidth: 2,
+      borderDash: [6, 3],
+      pointRadius: 0,
+      showLine: true,
+    });
+
+    chartRef.current = new Chart(ctx, {
+      type: 'scatter',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'bottom',
+            labels: {
+              color: '#94A3B8', font: { size: 10 }, boxWidth: 16, padding: 8,
+              filter: (item) => item.text !== 'Current WTI',
+            },
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: $${fmtNum(ctx.parsed.y)} EPS @ $${fmtNum(ctx.parsed.x, 0)} WTI`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'WTI ($/bbl)', color: '#94A3B8', font: { size: 11 } },
+            ticks: { callback: v => '$' + v, color: '#64748B' },
+            grid: { color: 'rgba(37,45,58,0.5)' },
+            min: 40, max: 120,
+          },
+          y: {
+            title: { display: true, text: 'Annual EPS ($)', color: '#94A3B8', font: { size: 11 } },
+            ticks: { callback: v => '$' + fmtNum(v, 0), color: '#64748B' },
+            grid: { color: 'rgba(37,45,58,0.5)' },
+          },
+        },
+      },
+    });
+
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
+  }, [wti, effectiveParams, selected]);
+
+  const hasTempChange = tempOverrides[activeItem.paramKey] != null;
+
+  return (
+    <div className="card">
+      <h3>Sensitivity Explorer <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-dim)' }}>— drag slider to see how parameters shift all 6 regression lines</span></h3>
+      <div className="sens-panel">
+        <div className="sens-chart-wrap">
+          <canvas ref={canvasRef} />
+        </div>
+        <div className="sens-right">
+          <div className="sens-boxes">
+            {SENS_ITEMS.map((item, i) => {
+              const val = tempOverrides[item.paramKey] ?? effectiveParams[item.paramKey];
+              const isDefault = tempOverrides[item.paramKey] == null;
+              return (
+                <div key={item.key} className={`sens-box${activeIdx === i ? ' active' : ''}`} onClick={() => setActiveIdx(i)}>
+                  <div className="sens-box-label">{item.label}</div>
+                  <div className="sens-box-value" style={!isDefault ? { color: 'var(--warn)' } : undefined}>
+                    {item.fmt(val)}
+                    {!isDefault && <span style={{ fontSize: 9, marginLeft: 4, opacity: 0.7 }}>*</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="sens-slider-col">
+            <span className="sens-slider-label">{activeItem.fmt(activeItem.max)}</span>
+            <input
+              type="range"
+              className="sens-vslider"
+              min={activeItem.min}
+              max={activeItem.max}
+              step={activeItem.step}
+              value={currentVal}
+              onChange={e => handleSliderChange(e.target.value)}
+            />
+            <span className="sens-slider-label">{activeItem.fmt(activeItem.min)}</span>
+            <div className="sens-btn-row">
+              <button className="btn btn-outline btn-sm" style={{ padding: '4px 8px', fontSize: 10 }} onClick={handleReset} title="Reset to default">↺</button>
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ padding: '4px 8px', fontSize: 10, opacity: hasTempChange ? 1 : 0.4 }}
+                onClick={handleSave}
+                disabled={!hasTempChange}
+                title="Save to Data Checklist"
+              >Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatsPanel({ stats }) {
   if (!stats) return null;
   return (
@@ -1201,6 +1440,9 @@ function App() {
 
           {/* Results */}
           <ResultsTable results={results} hasNull={hasNull} selected={selected} onSaveSelection={handleSaveSelection} params={params} />
+
+          {/* Sensitivity Explorer */}
+          {!hasNull && <SensitivityPanel wti={wti} params={params} selected={selected} onSaveParams={handleSaveParams} />}
 
           {/* Stats */}
           {stats && <StatsPanel stats={stats} />}
