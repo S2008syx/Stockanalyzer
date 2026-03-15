@@ -326,7 +326,7 @@ const PARAM_META = [
   { key: 'm2_income_tax_rate', label: 'Income Tax Rate' },
   { key: 'm2_shares', label: 'Diluted Shares' },
   { key: 'm2_ngl_to_wti_ratio', label: 'NGL/WTI Ratio', source: 'Q3 2025' },
-  { key: 'm2_gas_price_fixed', label: 'Gas Price ($/Mcf)', source: 'Q3 2025 realized' },
+  { key: 'm2_gas_price_fixed', label: 'Gas Price ($/Mcf)', source: 'Fixed $1.40 realized', readonly: true },
   { key: 'm2_oil_premium_to_wti', label: 'Oil Premium to WTI' },
   { key: 'm2_days_per_quarter', label: 'Days per Quarter' },
   { key: 'm2_bias_correction', label: 'Bias Correction', source: '5Q backtest' },
@@ -587,6 +587,8 @@ function DataChecklist({ params, onSave, onClose }) {
       const num = typeof v === 'string' ? parseFloat(v) : v;
       parsed[k] = isNaN(num) ? DEFAULT_PARAMS[k] : num;
     }
+    // M2 gas price is always fixed
+    parsed.m2_gas_price_fixed = DEFAULT_PARAMS.m2_gas_price_fixed;
     onSave(parsed);
   }
 
@@ -1089,10 +1091,10 @@ function ResultsTable({ results, hasNull, selected, onSaveSelection, params }) {
 
 const SENS_ITEMS = [
   { key: 'ngl_ratio', label: 'NGL/WTI Ratio', paramKey: 'm2_ngl_to_wti_ratio', min: 0.20, max: 0.40, step: 0.005, fmt: v => v.toFixed(3) },
-  { key: 'gas_price', label: 'Gas Price $/Mcf', paramKey: 'm2_gas_price_fixed', min: 0.00, max: 4.00, step: 0.05, fmt: v => '$' + v.toFixed(2) },
+  { key: 'gas_price', label: 'Gas Price $/Mcf', paramKey: 'm3_gas_price_fixed', min: 0.00, max: 4.00, step: 0.05, fmt: v => '$' + v.toFixed(2) },
   { key: 'oil_prod', label: 'Oil Prod kbpd', paramKey: 'm2_oil_kbpd', min: 450, max: 550, step: 1, fmt: v => v.toFixed(0) },
-  { key: 'dda', label: 'DD&A $/BOE', paramKey: 'm2_DDA', min: 12, max: 18, step: 0.1, fmt: v => '$' + v.toFixed(1) },
-  { key: 'bias', label: 'Bias Correction', paramKey: 'm2_bias_correction', min: 0.70, max: 1.10, step: 0.005, fmt: v => v.toFixed(3) },
+  { key: 'bias_m2', label: 'M2 Bias', paramKey: 'm2_bias_correction', min: 0.70, max: 1.10, step: 0.005, fmt: v => v.toFixed(3) },
+  { key: 'bias_m3', label: 'M3 Bias', paramKey: 'm3_bias_correction', min: 0.70, max: 1.10, step: 0.005, fmt: v => v.toFixed(3) },
 ];
 
 function SensitivityPanel({ wti, params, selected, onSaveParams }) {
@@ -1104,19 +1106,19 @@ function SensitivityPanel({ wti, params, selected, onSaveParams }) {
   // Build effective params: base params + temp overrides
   const effectiveParams = useMemo(() => {
     const p = { ...params };
+    // M2 gas price is always fixed at 1.40
+    p.m2_gas_price_fixed = DEFAULT_PARAMS.m2_gas_price_fixed;
     for (const [paramKey, val] of Object.entries(tempOverrides)) {
       p[paramKey] = val;
-      // Sync related params
-      if (paramKey === 'm2_gas_price_fixed') {
-        p.m3_gas_price_fixed = val;
+      // Gas price slider (M3) also syncs to M4, never touches M2
+      if (paramKey === 'm3_gas_price_fixed') {
         p.m4_gas_price_fixed = val;
       }
-      if (paramKey === 'm2_bias_correction') {
-        p.m3_bias_correction = val;
-      }
+      // Oil prod syncs to M1
       if (paramKey === 'm2_oil_kbpd') {
         p.m1_oil_prod_bpd = val * 1000;
       }
+      // M2 bias and M3 bias are independent — no cross-sync
     }
     return p;
   }, [params, tempOverrides]);
@@ -1131,11 +1133,11 @@ function SensitivityPanel({ wti, params, selected, onSaveParams }) {
   }
 
   function handleReset() {
-    setTempOverrides(prev => {
-      const next = { ...prev };
-      delete next[activeItem.paramKey];
-      return next;
-    });
+    // Reset to DEFAULT_PARAMS initial value, not current Data Checklist value
+    setTempOverrides(prev => ({
+      ...prev,
+      [activeItem.paramKey]: DEFAULT_PARAMS[activeItem.paramKey],
+    }));
   }
 
   function handleSave() {
@@ -1144,16 +1146,17 @@ function SensitivityPanel({ wti, params, selected, onSaveParams }) {
     const val = tempOverrides[paramKey];
     if (val == null) return;
     newParams[paramKey] = val;
-    if (paramKey === 'm2_gas_price_fixed') {
-      newParams.m3_gas_price_fixed = val;
+    // Gas price slider (M3) also saves to M4, never touches M2
+    if (paramKey === 'm3_gas_price_fixed') {
       newParams.m4_gas_price_fixed = val;
     }
-    if (paramKey === 'm2_bias_correction') {
-      newParams.m3_bias_correction = val;
-    }
+    // Oil prod syncs to M1
     if (paramKey === 'm2_oil_kbpd') {
       newParams.m1_oil_prod_bpd = val * 1000;
     }
+    // M2 gas price always stays fixed
+    newParams.m2_gas_price_fixed = DEFAULT_PARAMS.m2_gas_price_fixed;
+    // M2 bias and M3 bias are independent
     onSaveParams(newParams);
     setTempOverrides(prev => {
       const next = { ...prev };
@@ -1243,7 +1246,7 @@ function SensitivityPanel({ wti, params, selected, onSaveParams }) {
     return () => { if (chartRef.current) chartRef.current.destroy(); };
   }, [wti, effectiveParams, selected]);
 
-  const hasTempChange = tempOverrides[activeItem.paramKey] != null;
+  const hasTempChange = tempOverrides[activeItem.paramKey] != null && tempOverrides[activeItem.paramKey] !== params[activeItem.paramKey];
 
   return (
     <div className="card">
@@ -1256,7 +1259,7 @@ function SensitivityPanel({ wti, params, selected, onSaveParams }) {
           <div className="sens-boxes">
             {SENS_ITEMS.map((item, i) => {
               const val = tempOverrides[item.paramKey] ?? effectiveParams[item.paramKey];
-              const isDefault = tempOverrides[item.paramKey] == null;
+              const isDefault = val === DEFAULT_PARAMS[item.paramKey];
               return (
                 <div key={item.key} className={`sens-box${activeIdx === i ? ' active' : ''}`} onClick={() => setActiveIdx(i)}>
                   <div className="sens-box-label">{item.label}</div>
