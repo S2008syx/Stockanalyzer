@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DCF Valuation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0C0F14; --bg-raised: #111520; --card: #151921; --card-hover: #1A2030;
+      --text: #E2E8F0; --text-sec: #94A3B8; --text-dim: #64748B;
+      --border: #252D3A; --border-hover: #3B4A5E;
+      --red: #F87171; --orange: #FB923C; --yellow: #FBBF24; --green: #4ADE80;
+      --blue: #60A5FA; --purple: #A78BFA; --cyan: #22D3EE;
+      --radius: 12px;
+    }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6;
+      -webkit-font-smoothing: antialiased; min-height: 100vh;
+    }
+
+    .back-btn {
+      position: fixed; top: 20px; left: 20px; z-index: 100;
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px;
+      transition: all 0.2s;
+    }
+    .back-btn:hover { background: var(--card-hover); border-color: var(--border-hover); }
+
+    .page-header { text-align: center; padding: 60px 20px 30px; }
+    .page-header h1 {
+      font-size: 32px; font-weight: 700;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .page-header p { color: var(--text-sec); margin-top: 8px; font-size: 15px; }
+
+    .container { max-width: 920px; margin: 0 auto; padding: 0 24px 80px; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px 32px;
+      position: relative;
+    }
+
+    .form-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px 24px;
+      margin-bottom: 24px;
+    }
+    .form-row { display: flex; flex-direction: column; gap: 6px; }
+    .form-row.full { grid-column: 1 / -1; }
+    .form-row label {
+      font-size: 13px; color: var(--text-sec); font-weight: 500;
+    }
+    .form-row .hint {
+      font-size: 11px; color: var(--text-dim); margin-top: 2px;
+    }
+    .form-row.error input, .form-row.error select {
+      border-color: var(--red);
+    }
+
+    input[type="text"], input[type="number"], select {
+      background: var(--bg-raised); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 12px; border-radius: 8px;
+      font-size: 14px; font-family: inherit; width: 100%;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus {
+      outline: none; border-color: var(--blue);
+    }
+
+    .row-inline { display: flex; gap: 8px; align-items: stretch; }
+    .row-inline input { flex: 1; }
+
+    .btn {
+      background: var(--bg-raised); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 18px; border-radius: 8px;
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      font-family: inherit; transition: all 0.15s; white-space: nowrap;
+    }
+    .btn:hover { background: var(--card-hover); border-color: var(--border-hover); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      color: #0C0F14; border: none; font-weight: 600;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary {
+      background: var(--bg-raised); border: 1px solid var(--blue); color: var(--blue);
+    }
+
+    .year-grid {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;
+      margin-top: 8px;
+    }
+    .year-cell { display: flex; flex-direction: column; gap: 4px; }
+    .year-cell label {
+      font-size: 11px; color: var(--text-dim); text-align: center;
+    }
+    .year-cell input {
+      padding: 8px 10px; font-size: 13px; text-align: center;
+    }
+
+    .calc-row {
+      display: flex; justify-content: flex-end; margin-top: 24px;
+    }
+
+    .result-box {
+      margin-top: 24px; padding-left: 4px;
+    }
+    .result-main {
+      font-size: 22px; font-weight: 700; color: var(--green);
+      letter-spacing: -0.3px;
+    }
+    .result-sub {
+      font-size: 12px; color: var(--text-sec); margin-top: 6px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .result-error {
+      font-size: 13px; color: var(--red); margin-top: 8px;
+    }
+
+    .loading { display: inline-block; opacity: 0.6; }
+  </style>
+</head>
+<body>
+
+<button class="back-btn" onclick="window.location.href='financial-calculator.html'">&larr; Back to Calculators</button>
+
+<div class="page-header">
+  <h1>DCF Valuation</h1>
+  <p>Discounted Cash Flow model — project FCFs and estimate fair value per share</p>
+</div>
+
+<div class="container">
+  <div class="card" id="inputCard">
+    <div class="form-grid">
+      <div class="form-row" id="row-ticker">
+        <label>Stock Ticker</label>
+        <input type="text" id="ticker" placeholder="e.g. AAPL" autocomplete="off" />
+      </div>
+
+      <div class="form-row" id="row-unit">
+        <label>FCF Unit</label>
+        <select id="fcfUnit">
+          <option value="billion" selected>Billion</option>
+          <option value="million">Million</option>
+        </select>
+      </div>
+
+      <div class="form-row full" id="row-period">
+        <label>Projection Period (Years)</label>
+        <div class="row-inline">
+          <input type="number" id="period" min="1" max="30" step="1" placeholder="e.g. 10" />
+          <button class="btn btn-secondary" id="generateBtn">Generate</button>
+        </div>
+      </div>
+
+      <div class="form-row full" id="row-fcfs" style="display:none">
+        <label>Projected Free Cash Flows</label>
+        <div class="year-grid" id="yearGrid"></div>
+      </div>
+
+      <div class="form-row" id="row-discount">
+        <label>Discount Rate (%)</label>
+        <input type="number" id="discountRate" step="0.1" placeholder="e.g. 9.0" />
+      </div>
+
+      <div class="form-row" id="row-multiple">
+        <label>Terminal EV/FCF Multiple</label>
+        <input type="number" id="terminalMultiple" step="0.1" placeholder="e.g. 15" />
+        <span class="hint">Applied to final year's FCF to estimate terminal value</span>
+      </div>
+    </div>
+
+    <div class="calc-row">
+      <button class="btn btn-primary" id="calcBtn">Calculate</button>
+    </div>
+  </div>
+
+  <div class="result-box" id="resultBox"></div>
+</div>
+
+<script>
+const FMP_STABLE = 'https://financialmodelingprep.com/stable';
+
+function getApiKeys() {
+  try { return JSON.parse(localStorage.getItem('sa_api_keys') || '{}'); }
+  catch { return {}; }
+}
+
+function fmtNum(n, dec) {
+  if (n == null || isNaN(n)) return '-';
+  return Number(n).toLocaleString('en-US', {
+    minimumFractionDigits: dec, maximumFractionDigits: dec,
+  });
+}
+
+function fmtBig(n) {
+  if (n == null || isNaN(n)) return '-';
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return '$' + (n / 1e12).toFixed(2) + 'T';
+  if (abs >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  return '$' + fmtNum(n, 2);
+}
+
+const $ = id => document.getElementById(id);
+
+let calcDone = false;
+
+$('generateBtn').addEventListener('click', () => {
+  const n = parseInt($('period').value, 10);
+  const row = $('row-period');
+  row.classList.remove('error');
+  if (!n || n < 1 || n > 30) {
+    row.classList.add('error');
+    return;
+  }
+  const grid = $('yearGrid');
+  grid.innerHTML = '';
+  for (let i = 1; i <= n; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'year-cell';
+    cell.innerHTML = `<label>Year ${i}</label><input type="number" step="any" data-year="${i}" />`;
+    grid.appendChild(cell);
+  }
+  $('row-fcfs').style.display = '';
+});
+
+async function fetchSharesOutstanding(ticker, fmpKey) {
+  const url = `${FMP_STABLE}/profile?symbol=${encodeURIComponent(ticker)}&apikey=${fmpKey}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`FMP error ${r.status}`);
+  const d = await r.json();
+  const profile = Array.isArray(d) ? d[0] : d;
+  if (!profile) throw new Error('Ticker not found');
+  let shares = profile.sharesOutstanding;
+  if (shares == null) {
+    // Fallback: try enterprise-values endpoint
+    const r2 = await fetch(`${FMP_STABLE}/enterprise-values?symbol=${encodeURIComponent(ticker)}&limit=1&apikey=${fmpKey}`);
+    if (r2.ok) {
+      const d2 = await r2.json();
+      if (Array.isArray(d2) && d2[0]) shares = d2[0].numberOfShares;
+    }
+  }
+  if (!shares) throw new Error('Shares outstanding unavailable');
+  return shares;
+}
+
+function clearErrors() {
+  document.querySelectorAll('.form-row.error').forEach(el => el.classList.remove('error'));
+}
+
+function validate() {
+  clearErrors();
+  let ok = true;
+  const ticker = $('ticker').value.trim();
+  const period = parseInt($('period').value, 10);
+  const discount = parseFloat($('discountRate').value);
+  const multiple = parseFloat($('terminalMultiple').value);
+  if (!ticker) { $('row-ticker').classList.add('error'); ok = false; }
+  if (!period || period < 1) { $('row-period').classList.add('error'); ok = false; }
+  if (isNaN(discount)) { $('row-discount').classList.add('error'); ok = false; }
+  if (isNaN(multiple)) { $('row-multiple').classList.add('error'); ok = false; }
+  // Check year inputs
+  const yearInputs = document.querySelectorAll('#yearGrid input');
+  if (yearInputs.length === 0) {
+    $('row-period').classList.add('error'); ok = false;
+  }
+  const fcfs = [];
+  yearInputs.forEach(inp => {
+    const v = parseFloat(inp.value);
+    if (isNaN(v)) { inp.parentElement.classList.add('error'); ok = false; }
+    fcfs.push(v);
+  });
+  return { ok, ticker, period, discount, multiple, fcfs };
+}
+
+function renderError(msg) {
+  $('resultBox').innerHTML = `<div class="result-error">${msg}</div>`;
+}
+
+async function handleCalculate() {
+  const v = validate();
+  if (!v.ok) {
+    renderError('Please fill in all required fields.');
+    return;
+  }
+  const keys = getApiKeys();
+  if (!keys.fmp) {
+    renderError('FMP API key not found. Please configure it in the Stock Analyzer first.');
+    return;
+  }
+
+  const btn = $('calcBtn');
+  const oldText = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading">Loading...</span>';
+
+  try {
+    const shares = await fetchSharesOutstanding(v.ticker.toUpperCase(), keys.fmp);
+
+    // Convert FCFs to a common unit (millions)
+    const unit = $('fcfUnit').value;
+    const multiplier = unit === 'billion' ? 1000 : 1; // user inputs in selected unit, convert to millions
+    const fcfsInMillions = v.fcfs.map(f => f * multiplier);
+
+    const r = v.discount / 100;
+    let pvFcfs = 0;
+    for (let t = 0; t < fcfsInMillions.length; t++) {
+      pvFcfs += fcfsInMillions[t] / Math.pow(1 + r, t + 1);
+    }
+    const lastFcf = fcfsInMillions[fcfsInMillions.length - 1];
+    const terminalValue = lastFcf * v.multiple;
+    const pvTerminal = terminalValue / Math.pow(1 + r, fcfsInMillions.length);
+    const enterpriseValue = pvFcfs + pvTerminal; // in millions
+
+    // Shares outstanding from FMP is actual count; convert EV to dollars
+    const evDollars = enterpriseValue * 1e6;
+    const sharePrice = evDollars / shares;
+
+    $('resultBox').innerHTML = `
+      <div class="result-main">Estimated Fair Value: $${fmtNum(sharePrice, 2)} / share</div>
+      <div class="result-sub">
+        PV of FCFs: ${fmtBig(pvFcfs * 1e6)} &nbsp;|&nbsp;
+        Terminal Value: ${fmtBig(terminalValue * 1e6)} &nbsp;|&nbsp;
+        Enterprise Value: ${fmtBig(evDollars)} &nbsp;|&nbsp;
+        Shares: ${fmtNum(shares / 1e6, 1)}M
+      </div>
+    `;
+    calcDone = true;
+    btn.innerHTML = '&#x21bb; Recalculate';
+  } catch (err) {
+    renderError('Error: ' + err.message);
+    btn.innerHTML = calcDone ? '&#x21bb; Recalculate' : oldText;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$('calcBtn').addEventListener('click', handleCalculate);
+</script>
+
+</body>
+</html>
