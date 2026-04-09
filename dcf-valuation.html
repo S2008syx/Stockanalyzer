@@ -323,13 +323,15 @@ async function handleCalculate() {
     const evDollars = enterpriseValue * 1e6;
     const sharePrice = evDollars / shares;
 
+    // Contribution percentages
+    const fcfPct = enterpriseValue > 0 ? (pvFcfs / enterpriseValue) * 100 : 0;
+    const termPct = enterpriseValue > 0 ? (pvTerminal / enterpriseValue) * 100 : 0;
+
     $('resultBox').innerHTML = `
       <div class="result-main">Estimated Fair Value: $${fmtNum(sharePrice, 2)} / share</div>
       <div class="result-sub">
-        PV of FCFs: ${fmtBig(pvFcfs * 1e6)} &nbsp;|&nbsp;
-        Terminal Value: ${fmtBig(terminalValue * 1e6)} &nbsp;|&nbsp;
-        Enterprise Value: ${fmtBig(evDollars)} &nbsp;|&nbsp;
-        Shares: ${fmtNum(shares / 1e6, 1)}M
+        ${v.period}-Year Cash Flow Contribution: ${fmtBig(pvFcfs * 1e6)} (${fcfPct.toFixed(1)}%) &nbsp;|&nbsp;
+        Terminal Value Contribution: ${fmtBig(pvTerminal * 1e6)} (${termPct.toFixed(1)}%)
       </div>
     `;
     calcDone = true;
